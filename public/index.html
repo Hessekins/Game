@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Acronym Showdown</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1>Acronym Showdown</h1>
+      <div id="roomBadge" class="room-badge hidden">Room <span id="roomCodeLabel"></span></div>
+    </header>
+
+    <main class="layout">
+      <section class="main-panel">
+
+        <!-- Landing: create or join -->
+        <div id="view-landing" class="view">
+          <div class="card">
+            <h2>Create a Game</h2>
+            <input id="createName" type="text" maxlength="20" placeholder="Your name" />
+            <button id="createRoomBtn">Create Room</button>
+          </div>
+          <div class="card">
+            <h2>Join a Game</h2>
+            <input id="joinName" type="text" maxlength="20" placeholder="Your name" />
+            <input id="joinCode" type="text" maxlength="4" placeholder="Room code" style="text-transform:uppercase" />
+            <button id="joinRoomBtn">Join Room</button>
+          </div>
+          <p id="landingError" class="error hidden"></p>
+        </div>
+
+        <!-- Lobby -->
+        <div id="view-lobby" class="view hidden">
+          <div class="card">
+            <h2>Lobby</h2>
+            <p>Share this code with friends: <strong id="lobbyCode"></strong></p>
+            <ul id="lobbyPlayers" class="player-list"></ul>
+            <button id="startGameBtn" class="hidden">Start Game</button>
+            <p id="lobbyHint" class="hint"></p>
+          </div>
+        </div>
+
+        <!-- Submitting phase -->
+        <div id="view-submitting" class="view hidden">
+          <div class="card">
+            <h2>Make an Acronym!</h2>
+            <div id="letters" class="letters"></div>
+            <p id="tiebreakerNote" class="hint hidden">Bonus round: only tied players submit answers.</p>
+            <div class="timer-row">
+              <div class="timer-bar"><div id="submitTimerFill" class="timer-fill"></div></div>
+              <span id="submitTimerText">60s</span>
+            </div>
+            <textarea id="answerInput" placeholder="One word per letter, e.g. Really Odd Boat Sailors"></textarea>
+            <button id="submitAnswerBtn">Submit Answer</button>
+            <p id="submitStatus" class="hint"></p>
+            <p id="submitError" class="error hidden"></p>
+            <h3>Submission Status</h3>
+            <ul id="submitStatusList" class="player-list"></ul>
+          </div>
+        </div>
+
+        <!-- Voting phase -->
+        <div id="view-voting" class="view hidden">
+          <div class="card">
+            <h2>Vote for the Best Answer</h2>
+            <div class="timer-row">
+              <div class="timer-bar"><div id="voteTimerFill" class="timer-fill"></div></div>
+              <span id="voteTimerText">30s</span>
+            </div>
+            <ul id="voteList" class="vote-list"></ul>
+            <p id="voteStatus" class="hint"></p>
+          </div>
+        </div>
+
+        <!-- Results phase -->
+        <div id="view-results" class="view hidden">
+          <div class="card">
+            <h2 id="resultsTitle">Round Results</h2>
+            <ul id="resultsList" class="results-list"></ul>
+            <p id="nextRoundHint" class="hint"></p>
+          </div>
+        </div>
+
+        <!-- Game over -->
+        <div id="view-gameover" class="view hidden">
+          <div class="card">
+            <h2>Game Over!</h2>
+            <p id="winnerLine" class="winner-line"></p>
+            <ol id="finalScores" class="results-list"></ol>
+          </div>
+        </div>
+
+      </section>
+
+      <aside class="chat-panel" id="chatPanel">
+        <h2>Chat</h2>
+        <div id="chatMessages" class="chat-messages"></div>
+        <div class="chat-input-row">
+          <input id="chatInput" type="text" maxlength="300" placeholder="Say something..." />
+          <button id="chatSendBtn">Send</button>
+        </div>
+      </aside>
+    </main>
+
+    <div id="scoreboard" class="scoreboard hidden">
+      <h3>Scores</h3>
+      <ul id="scoreboardList"></ul>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>
