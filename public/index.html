@@ -405,14 +405,8 @@ function renderWriting(){
       <div class="small" style="margin-top:10px;">Waiting on other players…</div></div>`;
   } else {
     body = `<div class="panel">
-      <div class="stack">
-        ${letters.map((L,i)=>`
-          <div class="acro-input-row">
-            <div class="acro-letter">${L}</div>
-            <input type="text" class="acroField" data-idx="${i}" placeholder="Word starting with ${L}...">
-          </div>
-        `).join('')}
-      </div>
+      <label>Your Phrase (using ${letters.join('-')})</label>
+      <input type="text" id="acroInput" placeholder="e.g. ${letters.map(L=>L+'___').join(' ')}" value="${escapeHtml(state.acroText||'')}">
       <div class="error-text" id="acroError"></div>
       <div class="row"><div class="bullet"></div><button class="bar" id="submitAcroBtn">Lock In Acronym</button></div>
     </div>`;
@@ -421,8 +415,8 @@ function renderWriting(){
   return `
     <div class="timer">ROUND ${r.round} OF ${r.settings.totalRounds} · WRITE YOUR ACRONYM</div>
     <div class="letters-strip">${letters.map(L=>`<div class="letter-tile">${L}</div>`).join('')}</div>
-    <div class="timer">${remaining}s REMAINING</div>
-    <div class="timer-bar"><div class="timer-fill" style="width:${pct}%"></div></div>
+    <div class="timer" id="timerText">${remaining}s REMAINING</div>
+    <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:${pct}%"></div></div>
     ${body}
   `;
 }
@@ -448,9 +442,8 @@ function renderVoting(){
   return `
     <div class="timer">ROUND ${r.round} OF ${r.settings.totalRounds} · VOTE FOR YOUR FAVORITE</div>
     <div class="letters-strip">${r.letters.map(L=>`<div class="letter-tile">${L}</div>`).join('')}</div>
-    <div class="timer">${remaining}s REMAINING</div>
-    <div class="timer-bar"><div class="timer-fill" style="width:${pct}%"></div></div>
-    ${rows || '<div class="panel center small">No acronyms were submitted this round.</div>'}
+    <div class="timer" id="timerText">${remaining}s REMAINING</div>
+    <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:${pct}%"></div></div>
     ${myVote ? '<div class="panel center small">Vote locked in — waiting on others…</div>' : ''}
   `;
 }
@@ -484,7 +477,7 @@ function renderResults(){
         ${Object.entries(r.players).sort((a,b)=>b[1].score-a[1].score).map(([id,p])=>`<li><span>${escapeHtml(p.name)}</span><span class="score">${p.score}</span></li>`).join('')}
       </ul>
     </div>
-    <div class="center small" style="margin-top:10px;">Next round in ${remaining}s…</div>
+    <div class="center small" id="timerText" style="margin-top:10px;">Next round in ${remaining}s…</div>
   `;
 }
 
@@ -512,6 +505,10 @@ function renderFinal(){
 function bindEvents(){
   const nameInput = document.getElementById('nameInput');
   if(nameInput) nameInput.oninput = e => { state.playerName = e.target.value; };
+
+  const acroInput = document.getElementById('acroInput');
+  if(acroInput) acroInput.oninput = e => { state.acroText = e.target.value; };
+
 
   const createBtn = document.getElementById('createBtn');
   if(createBtn) createBtn.onclick = onCreateRoom;
@@ -630,11 +627,10 @@ async function onStartGame(){
 }
 
 async function onSubmitAcronym(){
-  const fields = document.querySelectorAll('.acroField');
+  const input = document.getElementById('acroInput');
   const errBox = document.getElementById('acroError');
-  const words = Array.from(fields).map(f=>f.value.trim());
-  if(words.some(w=>!w)){ errBox.textContent = 'Fill in a word for every letter.'; return; }
-  const text = words.join(' ');
+  const text = (input.value || '').trim();
+  if(!text){ errBox.textContent = 'Type a phrase before locking it in.'; return; }
 
   const fresh = await getRoom(state.roomCode);
   if(!fresh){ errBox.textContent = 'Connection issue — try again.'; return; }
@@ -642,6 +638,7 @@ async function onSubmitAcronym(){
   fresh.submissions[state.playerId] = text;
   await setRoom(state.roomCode, fresh);
   state.room = fresh;
+  state.acroText = '';
   render();
 }
 
@@ -697,9 +694,35 @@ async function pollRoom(){
   state.room = fresh;
   if(fresh.phase !== state.screen){
     state.screen = fresh.phase;
+    render();
+    return;
   }
-  if(changed || true){ render(); } // re-render to keep timers ticking
+  if(changed) render();
 }
+
+// Lightweight per-second UI tick: updates the countdown text/bar in place
+// without rebuilding the DOM, so it never disturbs whatever's being typed.
+function uiTick(){
+  const r = state.room;
+  if(!r || (state.screen !== 'writing' && state.screen !== 'voting' && state.screen !== 'results')) return;
+  const timerText = document.getElementById('timerText');
+  if(!timerText) return;
+
+  const remaining = Math.max(0, Math.round((r.phaseEndsAt - nowMs())/1000));
+  let totalSeconds;
+  if(state.screen === 'writing') totalSeconds = r.settings.writingSeconds;
+  else if(state.screen === 'voting') totalSeconds = r.settings.votingSeconds;
+  else totalSeconds = r.settings.resultsSeconds;
+
+  timerText.textContent = state.screen === 'results' ? `Next round in ${remaining}s…` : `${remaining}s REMAINING`;
+
+  const timerFill = document.getElementById('timerFill');
+  if(timerFill){
+    const pct = Math.max(0, Math.min(100, (remaining/totalSeconds)*100));
+    timerFill.style.width = pct + '%';
+  }
+}
+let uiTickHandle = setInterval(uiTick, 1000);
 
 function startHostTick(){
   stopHostTick();
