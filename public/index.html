@@ -397,18 +397,21 @@ function renderWriting(){
   const remaining = Math.max(0, Math.round((r.phaseEndsAt - nowMs())/1000));
   const pct = Math.max(0, Math.min(100, (remaining / r.settings.writingSeconds)*100));
   const already = r.submissions && r.submissions[state.playerId];
+  const submittedCount = Object.keys(r.submissions || {}).length;
+  const playerCount = Object.keys(r.players || {}).length;
 
   let body;
   if(already){
     body = `<div class="panel center"><div style="font-size:16px; margin-bottom:6px;">Acronym locked in:</div>
       <div style="font-family:'Anton'; font-size:20px; color:var(--yellow); letter-spacing:1px;">${escapeHtml(already)}</div>
-      <div class="small" style="margin-top:10px;">Waiting on other players…</div></div>`;
+      <div class="small" style="margin-top:10px;">Waiting on other players… (${submittedCount} of ${playerCount} locked in)</div></div>`;
   } else {
     body = `<div class="panel">
       <label>Your Phrase (using ${letters.join('-')})</label>
       <input type="text" id="acroInput" placeholder="e.g. ${letters.map(L=>L+'___').join(' ')}" value="${escapeHtml(state.acroText||'')}">
       <div class="error-text" id="acroError"></div>
       <div class="row"><div class="bullet"></div><button class="bar" id="submitAcroBtn">Lock In Acronym</button></div>
+      <div class="small center" style="margin-top:8px;">${submittedCount} of ${playerCount} locked in</div>
     </div>`;
   }
 
@@ -427,6 +430,8 @@ function renderVoting(){
   const pct = Math.max(0, Math.min(100, (remaining / r.settings.votingSeconds)*100));
   const subs = Object.entries(r.submissions || {});
   const myVote = r.votes && r.votes[state.playerId];
+  const votedCount = Object.keys(r.votes || {}).length;
+  const playerCount = Object.keys(r.players || {}).length;
 
   const rows = subs.map(([pid, text], i)=>{
     const isMine = pid === state.playerId;
@@ -444,6 +449,8 @@ function renderVoting(){
     <div class="letters-strip">${r.letters.map(L=>`<div class="letter-tile">${L}</div>`).join('')}</div>
     <div class="timer" id="timerText">${remaining}s REMAINING</div>
     <div class="timer-bar"><div class="timer-fill" id="timerFill" style="width:${pct}%"></div></div>
+    ${rows || '<div class="panel center small">No acronyms were submitted this round.</div>'}
+    <div class="small center" style="margin-top:8px;">${votedCount} of ${playerCount} voted</div>
     ${myVote ? '<div class="panel center small">Vote locked in — waiting on others…</div>' : ''}
   `;
 }
@@ -730,16 +737,29 @@ function startHostTick(){
 }
 function stopHostTick(){ if(hostTickHandle){ clearInterval(hostTickHandle); hostTickHandle=null; } }
 
+function phaseReadyToAdvance(room){
+  if(nowMs() >= room.phaseEndsAt) return true;
+  const playerCount = Object.keys(room.players || {}).length;
+  if(playerCount === 0) return false;
+  if(room.phase === 'writing'){
+    return Object.keys(room.submissions || {}).length >= playerCount;
+  }
+  if(room.phase === 'voting'){
+    return Object.keys(room.votes || {}).length >= playerCount;
+  }
+  return false;
+}
+
 async function hostTick(){
   if(!isHost() || state.transitioning) return;
   const r = state.room;
   if(!r || r.phase==='lobby' || r.phase==='final') return;
-  if(nowMs() < r.phaseEndsAt) return;
+  if(!phaseReadyToAdvance(r)) return;
 
   state.transitioning = true;
   try{
     const fresh = await getRoom(state.roomCode);
-    if(!fresh || nowMs() < fresh.phaseEndsAt){ state.transitioning=false; return; }
+    if(!fresh || !phaseReadyToAdvance(fresh)){ state.transitioning=false; return; }
 
     if(fresh.phase === 'writing'){
       fresh.phase = 'voting';
