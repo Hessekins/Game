@@ -347,6 +347,7 @@ function renderLanding(){
     <div class="panel">
       <label>Your Name</label>
       <input type="text" id="nameInput" maxlength="18" placeholder="e.g. Jay" value="${escapeHtml(state.playerName)}">
+      <div class="error-text">${escapeHtml(state.error)}</div>
       <div class="row"><div class="bullet"></div><button class="bar" id="createBtn">Create a Room</button></div>
       <div style="height:14px"></div>
       <label>Have a Room Code?</label>
@@ -581,7 +582,6 @@ async function onCreateRoom(){
   }
   if(!ok){ state.error = 'Could not create room. Try again.'; render(); return; }
   state.roomCode = code;
-  state.room = room;
   state.screen = 'lobby';
   render();
   startPolling();
