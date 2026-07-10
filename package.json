@@ -1,16 +1,12 @@
 {
-  "name": "acronym-showdown",
+  "name": "initials-game-server",
   "version": "1.0.0",
-  "description": "A multiplayer browser party game: build acronyms from random letters, vote on the best one, and battle for the top score.",
+  "description": "Self-hosted server for the INITIALS! acronym party game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
   "dependencies": {
-    "express": "^4.19.2",
-    "socket.io": "^4.7.5"
+    "express": "^4.19.2"
   }
 }

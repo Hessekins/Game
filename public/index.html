@@ -1,117 +1,763 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Acronym Showdown</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INITIALS! — The Acronym Party Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#05050d;
+    --blue:#3b82f6;
+    --blue-dim:#1a2f6b;
+    --blue-glow:rgba(59,130,246,.55);
+    --red-dark:#5c0000;
+    --red:#ff2b2b;
+    --red-hi:#ffb3ad;
+    --yellow:#ffd400;
+    --ink:#eef1ff;
+    --ink-dim:#9aa3c7;
+    --panel:rgba(8,10,26,.72);
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Rajdhani',sans-serif;
+    overflow-x:hidden;
+    min-height:100vh;
+    position:relative;
+  }
+  canvas#swirl{
+    position:fixed; inset:0; width:100%; height:100%; z-index:0;
+  }
+  .scanlines{
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0.12) 0px, rgba(0,0,0,0.12) 1px, transparent 2px, transparent 3px);
+    mix-blend-mode:overlay; opacity:.5;
+  }
+  .vignette{
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    box-shadow: inset 0 0 180px rgba(0,0,0,.85);
+  }
+  #app{
+    position:relative; z-index:2;
+    max-width:720px; margin:0 auto;
+    padding:22px 16px 60px;
+    min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  .logo{
+    font-family:'Anton',sans-serif;
+    font-size:clamp(42px, 12vw, 78px);
+    letter-spacing:2px;
+    text-align:center;
+    line-height:.95;
+    margin:8px 0 4px;
+    background:linear-gradient(180deg, #ffe0da 0%, var(--red-hi) 18%, var(--red) 45%, var(--red-dark) 85%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:
+      drop-shadow(0 1px 0 #fff6)
+      drop-shadow(0 3px 0 #7a0000)
+      drop-shadow(0 6px 10px rgba(255,43,43,.45));
+    text-shadow:none;
+  }
+  .tagline{
+    font-family:'Share Tech Mono', monospace;
+    color:var(--blue);
+    text-align:center;
+    letter-spacing:3px;
+    font-size:12px;
+    text-transform:uppercase;
+    margin-bottom:22px;
+    text-shadow:0 0 10px var(--blue-glow);
+  }
+  .row{
+    display:flex; align-items:stretch; width:100%;
+    margin:10px 0;
+  }
+  .row .bullet{
+    width:34px; min-width:34px;
+    background:var(--blue);
+    box-shadow:0 0 14px var(--blue-glow), inset 0 0 0 2px #7fb0ff55;
+    border:2px solid #7fb0ff;
+    border-right:none;
+  }
+  .row .bar{
+    flex:1;
+    border:2px solid var(--blue);
+    border-left:none;
+    background:linear-gradient(180deg, rgba(20,30,70,.55), rgba(5,8,25,.55));
+    display:flex; align-items:center; justify-content:center;
+    padding:10px 14px;
+    font-weight:700; font-size:15px; letter-spacing:.5px;
+    text-transform:uppercase;
+    box-shadow:0 0 14px rgba(59,130,246,.25) inset;
+  }
+  .row.win .bullet{background:var(--yellow); border-color:#fff2a8; box-shadow:0 0 16px rgba(255,212,0,.6);}
+  .row.win .bar{color:var(--yellow); border-color:var(--yellow); text-shadow:0 0 10px rgba(255,212,0,.5);}
+  .row.mine .bar{color:var(--ink);}
+  .row.red .bar{color:var(--red-hi);}
+  .row.yellow .bar{color:var(--yellow);}
+  .row button.bar{cursor:pointer; font-family:inherit;}
+  .row button.bar:hover{background:linear-gradient(180deg, rgba(40,55,110,.7), rgba(10,14,40,.7));}
+  .row button.bar:disabled{opacity:.5; cursor:default;}
+
+  .panel{
+    width:100%;
+    background:var(--panel);
+    border:1px solid #2a3a7a;
+    border-radius:4px;
+    padding:18px;
+    margin-top:14px;
+    box-shadow:0 0 30px rgba(20,30,80,.35);
+  }
+  label{
+    display:block; font-size:12px; letter-spacing:2px; text-transform:uppercase;
+    color:var(--ink-dim); margin-bottom:6px; font-weight:600;
+  }
+  input[type=text]{
+    width:100%; padding:12px 12px; margin-bottom:14px;
+    background:#0a0e24; border:2px solid var(--blue-dim); color:var(--ink);
+    font-family:'Share Tech Mono', monospace; font-size:16px; letter-spacing:1px;
+    border-radius:2px;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--blue); box-shadow:0 0 10px var(--blue-glow);}
+  .btn{
+    width:100%; padding:13px; font-family:'Anton',sans-serif; letter-spacing:2px;
+    font-size:17px; text-transform:uppercase; cursor:pointer; border:none; border-radius:2px;
+    background:linear-gradient(180deg, #ff5b5b, var(--red) 55%, var(--red-dark));
+    color:#fff; box-shadow:0 3px 0 #4a0000, 0 6px 16px rgba(255,43,43,.35);
+    transition:transform .05s ease;
+  }
+  .btn:active{transform:translateY(2px); box-shadow:0 1px 0 #4a0000;}
+  .btn:disabled{opacity:.4; cursor:default;}
+  .btn.blue{
+    background:linear-gradient(180deg, #6fa6ff, var(--blue) 55%, #163a8f);
+    box-shadow:0 3px 0 #0d2360, 0 6px 16px rgba(59,130,246,.35);
+  }
+  .btn.ghost{
+    background:transparent; border:2px solid var(--blue-dim); color:var(--ink-dim); box-shadow:none;
+  }
+
+  .code-display{
+    font-family:'Share Tech Mono', monospace;
+    text-align:center; font-size:42px; letter-spacing:14px;
+    color:var(--yellow); text-shadow:0 0 18px rgba(255,212,0,.5);
+    margin:6px 0 14px;
+  }
+  .center{text-align:center;}
+  .small{font-size:12px; color:var(--ink-dim); letter-spacing:1px;}
+  .letters-strip{
+    display:flex; justify-content:center; gap:10px; margin:14px 0 20px; flex-wrap:wrap;
+  }
+  .letter-tile{
+    font-family:'Anton',sans-serif; font-size:34px;
+    width:56px; height:56px; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(180deg, #16204a, #060a1c);
+    border:2px solid var(--blue); border-radius:6px;
+    color:var(--yellow); text-shadow:0 0 12px rgba(255,212,0,.5);
+    box-shadow:0 0 18px rgba(59,130,246,.4), inset 0 0 10px rgba(59,130,246,.25);
+  }
+  .timer{
+    font-family:'Share Tech Mono', monospace; text-align:center; font-size:15px;
+    color:var(--blue); letter-spacing:2px; margin-bottom:10px;
+  }
+  .timer-bar{height:6px; background:#0a0e24; border:1px solid var(--blue-dim); margin-bottom:16px; border-radius:3px; overflow:hidden;}
+  .timer-fill{height:100%; background:linear-gradient(90deg, var(--blue), var(--yellow)); transition:width 1s linear;}
+  .acro-input-row{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .acro-letter{
+    font-family:'Anton',sans-serif; font-size:22px; color:var(--yellow); width:30px; text-align:center;
+    text-shadow:0 0 8px rgba(255,212,0,.5);
+  }
+  .player-list{list-style:none; padding:0; margin:0;}
+  .player-list li{
+    display:flex; justify-content:space-between; padding:9px 12px; margin-bottom:6px;
+    background:rgba(20,30,70,.35); border-left:3px solid var(--blue); border-radius:2px;
+    font-weight:600;
+  }
+  .player-list li .score{color:var(--yellow); font-family:'Share Tech Mono', monospace;}
+  .badge{
+    display:inline-block; font-size:10px; padding:2px 6px; border-radius:2px; margin-left:8px;
+    background:var(--blue); color:#fff; letter-spacing:1px; vertical-align:middle;
+  }
+  .badge.host{background:var(--yellow); color:#302400;}
+  .footer-note{margin-top:24px; text-align:center; font-size:11px; color:#5c6690; letter-spacing:1px;}
+  .error-text{color:var(--red-hi); font-size:13px; margin:-6px 0 12px; min-height:16px;}
+  .trophy{font-size:52px; text-align:center; margin-bottom:6px;}
+  .stack{display:flex; flex-direction:column; gap:8px;}
+  @media (max-width:420px){
+    .letter-tile{width:46px; height:46px; font-size:28px;}
+    .code-display{font-size:32px; letter-spacing:9px;}
+  }
+</style>
 </head>
 <body>
-  <div id="app">
-    <header class="topbar">
-      <h1>Acronym Showdown</h1>
-      <div id="roomBadge" class="room-badge hidden">Room <span id="roomCodeLabel"></span></div>
-    </header>
+<canvas id="swirl"></canvas>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+<div id="app"></div>
 
-    <main class="layout">
-      <section class="main-panel">
+<script>
+/* ---------------- Canvas swirl background ---------------- */
+const canvas = document.getElementById('swirl');
+const ctx = canvas.getContext('2d');
+function resize(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize); resize();
 
-        <!-- Landing: create or join -->
-        <div id="view-landing" class="view">
-          <div class="card">
-            <h2>Create a Game</h2>
-            <input id="createName" type="text" maxlength="20" placeholder="Your name" />
-            <button id="createRoomBtn">Create Room</button>
-          </div>
-          <div class="card">
-            <h2>Join a Game</h2>
-            <input id="joinName" type="text" maxlength="20" placeholder="Your name" />
-            <input id="joinCode" type="text" maxlength="4" placeholder="Room code" style="text-transform:uppercase" />
-            <button id="joinRoomBtn">Join Room</button>
-          </div>
-          <p id="landingError" class="error hidden"></p>
-        </div>
+const arcs = [];
+for(let i=0;i<7;i++){
+  arcs.push({
+    r: 120 + i*70 + Math.random()*40,
+    speed: (Math.random()*0.0007+0.0002) * (i%2===0?1:-1),
+    offset: Math.random()*Math.PI*2,
+    width: 2 + Math.random()*2,
+    sweep: Math.PI*(0.6+Math.random()*0.8)
+  });
+}
+let t0 = 0;
+function drawSwirl(ts){
+  if(!t0) t0 = ts;
+  const dt = ts;
+  ctx.fillStyle = '#05050d';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  const cx = canvas.width*0.5, cy = canvas.height*0.4;
+  arcs.forEach(a=>{
+    const ang = a.offset + dt*a.speed;
+    ctx.beginPath();
+    ctx.arc(cx, cy, a.r, ang, ang+a.sweep);
+    ctx.strokeStyle = 'rgba(59,130,246,0.35)';
+    ctx.lineWidth = a.width;
+    ctx.shadowColor = 'rgba(59,130,246,0.55)';
+    ctx.shadowBlur = 14;
+    ctx.stroke();
+  });
+  requestAnimationFrame(drawSwirl);
+}
+requestAnimationFrame(drawSwirl);
 
-        <!-- Lobby -->
-        <div id="view-lobby" class="view hidden">
-          <div class="card">
-            <h2>Lobby</h2>
-            <p>Share this code with friends: <strong id="lobbyCode"></strong></p>
-            <ul id="lobbyPlayers" class="player-list"></ul>
-            <button id="startGameBtn" class="hidden">Start Game</button>
-            <p id="lobbyHint" class="hint"></p>
-          </div>
-        </div>
+/* ---------------- Game constants ---------------- */
+const LETTER_POOL = "EEEEAAAARRRRIIIOOOOTTTTNNNNSSSSLLLLCCUUDDPPMMHHGGBBFFYYWWKVJ";
+const WRITING_SECONDS = 60;
+const VOTING_SECONDS = 30;
+const RESULTS_SECONDS = 12;
+const POLL_MS = 1800;
 
-        <!-- Submitting phase -->
-        <div id="view-submitting" class="view hidden">
-          <div class="card">
-            <h2>Make an Acronym!</h2>
-            <div id="letters" class="letters"></div>
-            <p id="tiebreakerNote" class="hint hidden">Bonus round: only tied players submit answers.</p>
-            <div class="timer-row">
-              <div class="timer-bar"><div id="submitTimerFill" class="timer-fill"></div></div>
-              <span id="submitTimerText">60s</span>
-            </div>
-            <textarea id="answerInput" placeholder="One word per letter, e.g. Really Odd Boat Sailors"></textarea>
-            <button id="submitAnswerBtn">Submit Answer</button>
-            <p id="submitStatus" class="hint"></p>
-            <p id="submitError" class="error hidden"></p>
-            <h3>Submission Status</h3>
-            <ul id="submitStatusList" class="player-list"></ul>
-          </div>
-        </div>
+function uid(){ return 'p_' + Math.random().toString(36).slice(2,10); }
+function roomCodeGen(){
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXY23456789";
+  let s=''; for(let i=0;i<4;i++) s += chars[Math.floor(Math.random()*chars.length)];
+  return s;
+}
+function randomLetters(n){
+  const out=[];
+  for(let i=0;i<n;i++) out.push(LETTER_POOL[Math.floor(Math.random()*LETTER_POOL.length)]);
+  return out;
+}
+function nowMs(){ return Date.now(); }
 
-        <!-- Voting phase -->
-        <div id="view-voting" class="view hidden">
-          <div class="card">
-            <h2>Vote for the Best Answer</h2>
-            <div class="timer-row">
-              <div class="timer-bar"><div id="voteTimerFill" class="timer-fill"></div></div>
-              <span id="voteTimerText">30s</span>
-            </div>
-            <ul id="voteList" class="vote-list"></ul>
-            <p id="voteStatus" class="hint"></p>
-          </div>
-        </div>
+/* ---------------- Storage helpers (talk to our own server) ---------------- */
+async function getRoom(code){
+  try{
+    const res = await fetch('/api/room/' + code);
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){ return null; }
+}
+async function setRoom(code, obj){
+  try{
+    const res = await fetch('/api/room/' + code, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(obj)
+    });
+    return res.ok;
+  }catch(e){ return false; }
+}
+// Only used the first time a room is created — fails with 409 if the code is taken.
+async function createRoomOnServer(code, obj){
+  try{
+    const res = await fetch('/api/room', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code, room: obj })
+    });
+    return res.status === 201;
+  }catch(e){ return false; }
+}
+function getSavedName(){
+  try{ return localStorage.getItem('initials-player-name') || ''; }catch(e){ return ''; }
+}
+function saveName(name){
+  try{ localStorage.setItem('initials-player-name', name); }catch(e){}
+}
 
-        <!-- Results phase -->
-        <div id="view-results" class="view hidden">
-          <div class="card">
-            <h2 id="resultsTitle">Round Results</h2>
-            <ul id="resultsList" class="results-list"></ul>
-            <p id="nextRoundHint" class="hint"></p>
-          </div>
-        </div>
+/* ---------------- App State ---------------- */
+const state = {
+  screen: 'landing', // landing, lobby, writing, voting, results, final
+  playerId: uid(),
+  playerName: '',
+  roomCode: null,
+  room: null,
+  error: '',
+  errorJoin: '',
+  acroValues: [],
+  submitted: false,
+  voted: false,
+  numLetters: 4,
+  totalRounds: 5,
+  joining: false,
+  transitioning: false,
+};
 
-        <!-- Game over -->
-        <div id="view-gameover" class="view hidden">
-          <div class="card">
-            <h2>Game Over!</h2>
-            <p id="winnerLine" class="winner-line"></p>
-            <ol id="finalScores" class="results-list"></ol>
-          </div>
-        </div>
+let pollHandle = null;
+let hostTickHandle = null;
 
-      </section>
+function isHost(){
+  return state.room && state.room.hostId === state.playerId;
+}
 
-      <aside class="chat-panel" id="chatPanel">
-        <h2>Chat</h2>
-        <div id="chatMessages" class="chat-messages"></div>
-        <div class="chat-input-row">
-          <input id="chatInput" type="text" maxlength="300" placeholder="Say something..." />
-          <button id="chatSendBtn">Send</button>
-        </div>
-      </aside>
-    </main>
+/* ---------------- Rendering ---------------- */
+const app = document.getElementById('app');
 
-    <div id="scoreboard" class="scoreboard hidden">
-      <h3>Scores</h3>
-      <ul id="scoreboardList"></ul>
+function render(){
+  const r = state.room;
+  let html = `<div class="logo">INITIALS!</div><div class="tagline">the letters are fixed. the genius is yours.</div>`;
+
+  if(state.screen === 'landing') html += renderLanding();
+  else if(state.screen === 'lobby') html += renderLobby();
+  else if(state.screen === 'writing') html += renderWriting();
+  else if(state.screen === 'voting') html += renderVoting();
+  else if(state.screen === 'results') html += renderResults();
+  else if(state.screen === 'final') html += renderFinal();
+
+  html += `<div class="footer-note">ROOM ${state.roomCode || '----'} · YOU ARE ${escapeHtml(state.playerName || 'ANONYMOUS')}</div>`;
+  app.innerHTML = html;
+  bindEvents();
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderLanding(){
+  return `
+    <div class="panel">
+      <label>Your Name</label>
+      <input type="text" id="nameInput" maxlength="18" placeholder="e.g. Jay" value="${escapeHtml(state.playerName)}">
+      <div class="row"><div class="bullet"></div><button class="bar" id="createBtn">Create a Room</button></div>
+      <div style="height:14px"></div>
+      <label>Have a Room Code?</label>
+      <input type="text" id="codeInput" maxlength="4" placeholder="ROOM CODE" style="text-transform:uppercase" value="${escapeHtml(state.roomCode||'')}">
+      <div class="error-text">${escapeHtml(state.errorJoin)}</div>
+      <div class="row"><div class="bullet"></div><button class="bar" id="joinBtn">Join Room</button></div>
     </div>
-  </div>
+  `;
+}
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js"></script>
+function renderLobby(){
+  const r = state.room;
+  const players = Object.entries(r.players);
+  let hostControls = '';
+  if(isHost()){
+    hostControls = `
+      <div class="panel">
+        <label>Letters per round</label>
+        <input type="text" id="numLettersInput" value="${r.settings.numLetters}" style="text-align:center;font-size:22px;">
+        <label>Number of rounds</label>
+        <input type="text" id="totalRoundsInput" value="${r.settings.totalRounds}" style="text-align:center;font-size:22px;">
+        <div class="row"><div class="bullet"></div><button class="bar" id="saveSettingsBtn">Save Settings</button></div>
+      </div>
+      <div class="row" style="margin-top:18px;"><div class="bullet"></div><button class="bar" id="startBtn" ${players.length<2?'disabled':''}>Start Game</button></div>
+      ${players.length<2 ? '<div class="error-text center">Need at least 2 players to start.</div>' : ''}
+    `;
+  } else {
+    hostControls = `<div class="panel center small">Waiting for the host to start the game…</div>`;
+  }
+
+  return `
+    <div class="code-display">${state.roomCode}</div>
+    <div class="center small" style="margin-bottom:14px;">SHARE THIS CODE SO FRIENDS CAN JOIN</div>
+    <div class="panel">
+      <label>Players (${players.length})</label>
+      <ul class="player-list">
+        ${players.map(([id,p])=>`<li><span>${escapeHtml(p.name)}${id===r.hostId?'<span class="badge host">HOST</span>':''}${id===state.playerId?'<span class="badge">YOU</span>':''}</span><span class="score">0</span></li>`).join('')}
+      </ul>
+    </div>
+    ${hostControls}
+  `;
+}
+
+function renderWriting(){
+  const r = state.room;
+  const letters = r.letters;
+  const remaining = Math.max(0, Math.round((r.phaseEndsAt - nowMs())/1000));
+  const pct = Math.max(0, Math.min(100, (remaining / r.settings.writingSeconds)*100));
+  const already = r.submissions && r.submissions[state.playerId];
+
+  let body;
+  if(already){
+    body = `<div class="panel center"><div style="font-size:16px; margin-bottom:6px;">Acronym locked in:</div>
+      <div style="font-family:'Anton'; font-size:20px; color:var(--yellow); letter-spacing:1px;">${escapeHtml(already)}</div>
+      <div class="small" style="margin-top:10px;">Waiting on other players…</div></div>`;
+  } else {
+    body = `<div class="panel">
+      <div class="stack">
+        ${letters.map((L,i)=>`
+          <div class="acro-input-row">
+            <div class="acro-letter">${L}</div>
+            <input type="text" class="acroField" data-idx="${i}" placeholder="Word starting with ${L}...">
+          </div>
+        `).join('')}
+      </div>
+      <div class="error-text" id="acroError"></div>
+      <div class="row"><div class="bullet"></div><button class="bar" id="submitAcroBtn">Lock In Acronym</button></div>
+    </div>`;
+  }
+
+  return `
+    <div class="timer">ROUND ${r.round} OF ${r.settings.totalRounds} · WRITE YOUR ACRONYM</div>
+    <div class="letters-strip">${letters.map(L=>`<div class="letter-tile">${L}</div>`).join('')}</div>
+    <div class="timer">${remaining}s REMAINING</div>
+    <div class="timer-bar"><div class="timer-fill" style="width:${pct}%"></div></div>
+    ${body}
+  `;
+}
+
+function renderVoting(){
+  const r = state.room;
+  const remaining = Math.max(0, Math.round((r.phaseEndsAt - nowMs())/1000));
+  const pct = Math.max(0, Math.min(100, (remaining / r.settings.votingSeconds)*100));
+  const subs = Object.entries(r.submissions || {});
+  const myVote = r.votes && r.votes[state.playerId];
+
+  const rows = subs.map(([pid, text], i)=>{
+    const isMine = pid === state.playerId;
+    const votedForThis = myVote === pid;
+    if(isMine){
+      return `<div class="row mine"><div class="bullet"></div><div class="bar">${escapeHtml(text)} <span class="small">&nbsp;(yours)</span></div></div>`;
+    }
+    return `<div class="row ${votedForThis?'win':''}"><div class="bullet"></div>
+      <button class="bar" data-vote="${pid}" ${myVote?'disabled':''}>${escapeHtml(text)}</button>
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="timer">ROUND ${r.round} OF ${r.settings.totalRounds} · VOTE FOR YOUR FAVORITE</div>
+    <div class="letters-strip">${r.letters.map(L=>`<div class="letter-tile">${L}</div>`).join('')}</div>
+    <div class="timer">${remaining}s REMAINING</div>
+    <div class="timer-bar"><div class="timer-fill" style="width:${pct}%"></div></div>
+    ${rows || '<div class="panel center small">No acronyms were submitted this round.</div>'}
+    ${myVote ? '<div class="panel center small">Vote locked in — waiting on others…</div>' : ''}
+  `;
+}
+
+function renderResults(){
+  const r = state.room;
+  const subs = Object.entries(r.submissions || {});
+  const voteCounts = {};
+  Object.values(r.votes || {}).forEach(v=>{ voteCounts[v] = (voteCounts[v]||0)+1; });
+  let maxVotes = 0;
+  Object.values(voteCounts).forEach(c=>{ if(c>maxVotes) maxVotes=c; });
+
+  const rows = subs.map(([pid, text])=>{
+    const votes = voteCounts[pid] || 0;
+    const isWinner = maxVotes>0 && votes===maxVotes;
+    const name = r.players[pid] ? r.players[pid].name : '???';
+    return `<div class="row ${isWinner?'win':''}"><div class="bullet"></div>
+      <div class="bar">${escapeHtml(text)} <span class="small">&nbsp;— ${escapeHtml(name)} (${votes} vote${votes===1?'':'s'})</span></div>
+    </div>`;
+  }).join('');
+
+  const remaining = Math.max(0, Math.round((r.phaseEndsAt - nowMs())/1000));
+
+  return `
+    <div class="timer">ROUND ${r.round} RESULTS</div>
+    <div class="letters-strip">${r.letters.map(L=>`<div class="letter-tile">${L}</div>`).join('')}</div>
+    ${rows || '<div class="panel center small">No entries this round.</div>'}
+    <div class="panel">
+      <label>Scoreboard</label>
+      <ul class="player-list">
+        ${Object.entries(r.players).sort((a,b)=>b[1].score-a[1].score).map(([id,p])=>`<li><span>${escapeHtml(p.name)}</span><span class="score">${p.score}</span></li>`).join('')}
+      </ul>
+    </div>
+    <div class="center small" style="margin-top:10px;">Next round in ${remaining}s…</div>
+  `;
+}
+
+function renderFinal(){
+  const r = state.room;
+  const sorted = Object.entries(r.players).sort((a,b)=>b[1].score-a[1].score);
+  const winner = sorted[0];
+  return `
+    <div class="trophy">🏆</div>
+    <div class="center" style="font-family:'Anton'; font-size:26px; color:var(--yellow); text-shadow:0 0 14px rgba(255,212,0,.5); margin-bottom:16px;">
+      ${escapeHtml(winner ? winner[1].name : '???')} WINS!
+    </div>
+    <div class="panel">
+      <label>Final Scoreboard</label>
+      <ul class="player-list">
+        ${sorted.map(([id,p],i)=>`<li><span>${i===0?'👑 ':''}${escapeHtml(p.name)}</span><span class="score">${p.score}</span></li>`).join('')}
+      </ul>
+    </div>
+    ${isHost() ? `<div class="row" style="margin-top:18px;"><div class="bullet"></div><button class="bar" id="playAgainBtn">Play Again (Same Room)</button></div>` : `<div class="panel center small">Waiting for host to restart…</div>`}
+    <div class="row"><div class="bullet"></div><button class="bar" id="leaveBtn">Leave Room</button></div>
+  `;
+}
+
+/* ---------------- Event binding ---------------- */
+function bindEvents(){
+  const nameInput = document.getElementById('nameInput');
+  if(nameInput) nameInput.oninput = e => { state.playerName = e.target.value; };
+
+  const createBtn = document.getElementById('createBtn');
+  if(createBtn) createBtn.onclick = onCreateRoom;
+
+  const joinBtn = document.getElementById('joinBtn');
+  if(joinBtn) joinBtn.onclick = onJoinRoom;
+
+  const codeInput = document.getElementById('codeInput');
+  if(codeInput) codeInput.oninput = e => { e.target.value = e.target.value.toUpperCase(); };
+
+  const numLettersInput = document.getElementById('numLettersInput');
+  const totalRoundsInput = document.getElementById('totalRoundsInput');
+  const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+  if(saveSettingsBtn) saveSettingsBtn.onclick = async ()=>{
+    const nl = Math.max(3, Math.min(6, parseInt(numLettersInput.value)||4));
+    const tr = Math.max(1, Math.min(15, parseInt(totalRoundsInput.value)||5));
+    const fresh = await getRoom(state.roomCode);
+    if(fresh){
+      fresh.settings.numLetters = nl;
+      fresh.settings.totalRounds = tr;
+      await setRoom(state.roomCode, fresh);
+      state.room = fresh;
+      render();
+    }
+  };
+
+  const startBtn = document.getElementById('startBtn');
+  if(startBtn) startBtn.onclick = onStartGame;
+
+  const submitAcroBtn = document.getElementById('submitAcroBtn');
+  if(submitAcroBtn) submitAcroBtn.onclick = onSubmitAcronym;
+
+  document.querySelectorAll('[data-vote]').forEach(btn=>{
+    btn.onclick = ()=> onVote(btn.getAttribute('data-vote'));
+  });
+
+  const playAgainBtn = document.getElementById('playAgainBtn');
+  if(playAgainBtn) playAgainBtn.onclick = onPlayAgain;
+
+  const leaveBtn = document.getElementById('leaveBtn');
+  if(leaveBtn) leaveBtn.onclick = onLeave;
+}
+
+/* ---------------- Actions ---------------- */
+async function onCreateRoom(){
+  const nameInput = document.getElementById('nameInput');
+  const name = (nameInput.value || '').trim() || 'Player';
+  state.playerName = name;
+  saveName(name);
+
+  let code, ok = false;
+  for(let attempt=0; attempt<5 && !ok; attempt++){
+    code = roomCodeGen();
+    const room = {
+      code,
+      hostId: state.playerId,
+      phase: 'lobby',
+      round: 0,
+      settings: { numLetters: 4, totalRounds: 5, writingSeconds: WRITING_SECONDS, votingSeconds: VOTING_SECONDS, resultsSeconds: RESULTS_SECONDS },
+      players: { [state.playerId]: { name, score: 0 } },
+      letters: [],
+      submissions: {},
+      votes: {},
+      phaseEndsAt: 0,
+    };
+    ok = await createRoomOnServer(code, room);
+    if(ok) state.room = room;
+  }
+  if(!ok){ state.error = 'Could not create room. Try again.'; render(); return; }
+  state.roomCode = code;
+  state.room = room;
+  state.screen = 'lobby';
+  render();
+  startPolling();
+  startHostTick();
+}
+
+async function onJoinRoom(){
+  const nameInput = document.getElementById('nameInput');
+  const codeInput = document.getElementById('codeInput');
+  const name = (nameInput.value || '').trim() || 'Player';
+  const code = (codeInput.value || '').trim().toUpperCase();
+  if(code.length !== 4){ state.errorJoin = 'Enter a valid 4-character room code.'; render(); return; }
+
+  const room = await getRoom(code);
+  if(!room){ state.errorJoin = 'Room not found.'; render(); return; }
+  if(room.phase !== 'lobby'){ state.errorJoin = 'This game has already started.'; render(); return; }
+
+  state.playerName = name;
+  saveName(name);
+  room.players[state.playerId] = { name, score: 0 };
+  await setRoom(code, room);
+
+  state.roomCode = code;
+  state.room = room;
+  state.errorJoin = '';
+  state.screen = 'lobby';
+  render();
+  startPolling();
+}
+
+async function onStartGame(){
+  if(!isHost()) return;
+  const fresh = await getRoom(state.roomCode);
+  if(!fresh) return;
+  fresh.round = 1;
+  fresh.letters = randomLetters(fresh.settings.numLetters);
+  fresh.submissions = {};
+  fresh.votes = {};
+  fresh.phase = 'writing';
+  fresh.phaseEndsAt = nowMs() + fresh.settings.writingSeconds*1000;
+  await setRoom(state.roomCode, fresh);
+  state.room = fresh;
+  state.screen = 'writing';
+  render();
+  startHostTick();
+}
+
+async function onSubmitAcronym(){
+  const fields = document.querySelectorAll('.acroField');
+  const errBox = document.getElementById('acroError');
+  const words = Array.from(fields).map(f=>f.value.trim());
+  if(words.some(w=>!w)){ errBox.textContent = 'Fill in a word for every letter.'; return; }
+  const text = words.join(' ');
+
+  const fresh = await getRoom(state.roomCode);
+  if(!fresh){ errBox.textContent = 'Connection issue — try again.'; return; }
+  fresh.submissions = fresh.submissions || {};
+  fresh.submissions[state.playerId] = text;
+  await setRoom(state.roomCode, fresh);
+  state.room = fresh;
+  render();
+}
+
+async function onVote(pid){
+  const fresh = await getRoom(state.roomCode);
+  if(!fresh) return;
+  fresh.votes = fresh.votes || {};
+  if(fresh.votes[state.playerId]) return; // already voted
+  fresh.votes[state.playerId] = pid;
+  await setRoom(state.roomCode, fresh);
+  state.room = fresh;
+  render();
+}
+
+async function onPlayAgain(){
+  if(!isHost()) return;
+  const fresh = await getRoom(state.roomCode);
+  if(!fresh) return;
+  Object.keys(fresh.players).forEach(id=> fresh.players[id].score = 0);
+  fresh.round = 1;
+  fresh.letters = randomLetters(fresh.settings.numLetters);
+  fresh.submissions = {};
+  fresh.votes = {};
+  fresh.phase = 'writing';
+  fresh.phaseEndsAt = nowMs() + fresh.settings.writingSeconds*1000;
+  await setRoom(state.roomCode, fresh);
+  state.room = fresh;
+  state.screen = 'writing';
+  render();
+}
+
+function onLeave(){
+  stopPolling();
+  stopHostTick();
+  state.screen = 'landing';
+  state.room = null;
+  state.roomCode = null;
+  render();
+}
+
+/* ---------------- Polling & phase logic ---------------- */
+function startPolling(){
+  stopPolling();
+  pollHandle = setInterval(pollRoom, POLL_MS);
+}
+function stopPolling(){ if(pollHandle){ clearInterval(pollHandle); pollHandle=null; } }
+
+async function pollRoom(){
+  if(!state.roomCode) return;
+  const fresh = await getRoom(state.roomCode);
+  if(!fresh) return;
+  const changed = JSON.stringify(fresh) !== JSON.stringify(state.room);
+  state.room = fresh;
+  if(fresh.phase !== state.screen){
+    state.screen = fresh.phase;
+  }
+  if(changed || true){ render(); } // re-render to keep timers ticking
+}
+
+function startHostTick(){
+  stopHostTick();
+  hostTickHandle = setInterval(hostTick, 1000);
+}
+function stopHostTick(){ if(hostTickHandle){ clearInterval(hostTickHandle); hostTickHandle=null; } }
+
+async function hostTick(){
+  if(!isHost() || state.transitioning) return;
+  const r = state.room;
+  if(!r || r.phase==='lobby' || r.phase==='final') return;
+  if(nowMs() < r.phaseEndsAt) return;
+
+  state.transitioning = true;
+  try{
+    const fresh = await getRoom(state.roomCode);
+    if(!fresh || nowMs() < fresh.phaseEndsAt){ state.transitioning=false; return; }
+
+    if(fresh.phase === 'writing'){
+      fresh.phase = 'voting';
+      fresh.phaseEndsAt = nowMs() + fresh.settings.votingSeconds*1000;
+    } else if(fresh.phase === 'voting'){
+      const voteCounts = {};
+      Object.values(fresh.votes || {}).forEach(v=>{ voteCounts[v]=(voteCounts[v]||0)+1; });
+      let maxVotes = 0;
+      Object.values(voteCounts).forEach(c=>{ if(c>maxVotes) maxVotes=c; });
+      Object.entries(voteCounts).forEach(([pid,c])=>{
+        if(fresh.players[pid]) fresh.players[pid].score += c;
+      });
+      fresh.phase = 'results';
+      fresh.phaseEndsAt = nowMs() + fresh.settings.resultsSeconds*1000;
+    } else if(fresh.phase === 'results'){
+      if(fresh.round >= fresh.settings.totalRounds){
+        fresh.phase = 'final';
+      } else {
+        fresh.round += 1;
+        fresh.letters = randomLetters(fresh.settings.numLetters);
+        fresh.submissions = {};
+        fresh.votes = {};
+        fresh.phase = 'writing';
+        fresh.phaseEndsAt = nowMs() + fresh.settings.writingSeconds*1000;
+      }
+    }
+    await setRoom(state.roomCode, fresh);
+    state.room = fresh;
+    state.screen = fresh.phase;
+    render();
+  } finally {
+    state.transitioning = false;
+  }
+}
+
+/* ---------------- Init ---------------- */
+(function init(){
+  const saved = getSavedName();
+  if(saved) state.playerName = saved;
+  render();
+})();
+</script>
 </body>
 </html>

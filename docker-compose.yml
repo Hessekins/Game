@@ -1,0 +1,7 @@
+services:
+  initials-game:
+    build: .
+    container_name: initials-game
+    restart: unless-stopped
+    ports:
+      - "8420:8420"
