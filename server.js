@@ -16,7 +16,7 @@ const SUBMIT_SECONDS = 60;
 const VOTE_SECONDS = 30;
 const RESULTS_SECONDS = 12;
 const TOTAL_ROUNDS = 3;
-const MIN_PLAYERS = 2;
+const MIN_PLAYERS = 3;
 const MAX_CHAT_HISTORY = 100;
 const MAX_PLAYERS_MIN = 3;
 const MAX_PLAYERS_MAX = 8;
@@ -548,6 +548,33 @@ io.on('connection', (socket) => {
       text: text.trim().slice(0, 300),
       time: Date.now(),
     });
+  });
+
+  socket.on('leaveRoom', () => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    const player = room.players.get(socket.id);
+    if (!player) return;
+
+    // Remove player from room completely
+    room.players.delete(socket.id);
+    room.spectators.delete(socket.id);
+    socket.leave(room.code);
+    socket.data.roomCode = null;
+
+    reassignHostIfNeeded(room);
+
+    if (room.phase === 'submitting') checkAllSubmitted(room);
+    if (room.phase === 'voting') checkAllVoted(room);
+
+    broadcastRoomState(room);
+
+    if (connectedPlayers(room).length === 0) {
+      clearTimer(room);
+      rooms.delete(room.code);
+    }
+
+    socket.emit('leftRoom', {});
   });
 
   socket.on('disconnect', () => {

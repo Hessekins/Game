@@ -185,11 +185,20 @@ function renderLobby(state) {
 
 el('startGameBtn').addEventListener('click', () => socket.emit('startGame'));
 
-el('leaveGameBtn').addEventListener('click', () => {
-  socket.emit('disconnect');
+// Leave game buttons on all game phases
+['leaveGameBtn', 'leaveGameBtn2', 'leaveGameBtn3', 'leaveGameBtn4', 'leaveGameBtn5'].forEach(id => {
+  const btn = el(id);
+  if (btn) btn.addEventListener('click', () => socket.emit('leaveRoom'));
+});
+
+socket.on('leftRoom', () => {
   showView('landing');
   selfId = null;
   roomCode = null;
+  isSpectator = false;
+  el('roomBadge').classList.add('hidden');
+  // Clear chat when leaving
+  el('chatMessages').innerHTML = '';
 });
 
 el('applySettingsBtn').addEventListener('click', () => {

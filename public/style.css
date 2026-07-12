@@ -52,6 +52,7 @@ body {
   padding: 20px 24px 100px;
   max-width: 1200px;
   margin: 0 auto;
+  position: relative;
 }
 
 @media (max-width: 800px) {
@@ -250,3 +251,16 @@ label input[type="number"] { margin-left: 4px; }
 /* Spectators section */
 #spectatorsSection { margin-top: 12px; }
 #spectatorsSection h3 { margin-top: 0; }
+
+/* Leave game buttons */
+.leave-btn {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: var(--bad);
+  font-size: 0.9rem;
+  padding: 8px 14px;
+  z-index: 100;
+}
+
+.leave-btn:hover { filter: brightness(1.2); }
