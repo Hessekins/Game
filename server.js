@@ -503,6 +503,35 @@ io.on('connection', (socket) => {
     if (!room.isPrivate && room.phase === 'lobby') broadcastBrowsableRooms();
   });
 
+  socket.on('rejoinRoom', ({ code, name }) => {
+    const room = rooms.get((code || '').toUpperCase());
+    if (!room) {
+      return socket.emit('rejoinedRoom', { success: false });
+    }
+
+    // Player is rejoining - update their socket connection
+    socket.join(room.code);
+    socket.leave('browsing');
+    socket.data.roomCode = room.code;
+
+    // Find the player in the room (they might still be there from before disconnect)
+    let player = room.players.get(socket.id);
+    if (!player) {
+      // Player was removed, can't rejoin
+      socket.leave(room.code);
+      socket.join('browsing');
+      socket.data.roomCode = null;
+      return socket.emit('rejoinedRoom', { success: false });
+    }
+
+    // Update player connection status
+    player.connected = true;
+    socket.emit('rejoinedRoom', { code: room.code, selfId: socket.id, success: true });
+    socket.emit('chatHistory', room.roomChat);
+    broadcastRoomState(room);
+    updatePlayerStatus(socket.id, room.phase === 'lobby' ? 'waiting' : 'playing');
+  });
+
   socket.on('startGame', () => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;

@@ -49,13 +49,36 @@ function showNameError(msg) {
   el('nameError').classList.remove('hidden');
 }
 
-// On load, check if we have a saved player name
-if (playerName) {
+// On load, check if we have a saved player name and/or room code
+const savedRoomCode = localStorage.getItem('roomCode');
+if (playerName && savedRoomCode) {
+  // Rejoin the room after name is restored
+  showView('lobby');
+  socket.emit('rejoinRoom', { name: playerName, code: savedRoomCode });
+} else if (playerName) {
   showView('game-browser');
   socket.emit('enterGameBrowser', { name: playerName });
 } else {
   showView('name-entry');
 }
+
+// Handle rejoin response
+socket.on('rejoinedRoom', ({ code, selfId: id, success }) => {
+  if (success) {
+    selfId = id;
+    roomCode = code;
+    isSpectator = false;
+    el('roomBadge').classList.remove('hidden');
+    el('roomCodeLabel').textContent = code;
+    el('lobbyCode').textContent = code;
+    showView('lobby');
+  } else {
+    // Room no longer exists, go back to game browser
+    localStorage.removeItem('roomCode');
+    showView('game-browser');
+    socket.emit('enterGameBrowser', { name: playerName });
+  }
+});
 
 // ---------- Game Browser ----------
 el('createRoomBtn').addEventListener('click', () => {
@@ -159,6 +182,7 @@ socket.on('joinedRoom', ({ code, selfId: id }) => {
   selfId = id;
   roomCode = code;
   isSpectator = false;
+  localStorage.setItem('roomCode', code);
   el('roomBadge').classList.remove('hidden');
   el('roomCodeLabel').textContent = code;
   el('lobbyCode').textContent = code;
@@ -288,6 +312,7 @@ socket.on('leftRoom', () => {
   selfId = null;
   roomCode = null;
   isSpectator = false;
+  localStorage.removeItem('roomCode');
   el('roomBadge').classList.add('hidden');
   el('chatMessages').innerHTML = '';
   socket.emit('enterGameBrowser', {});
