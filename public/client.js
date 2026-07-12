@@ -5,6 +5,11 @@ let roomCode = null;
 let currentLetters = [];
 let submitCountdownHandle = null;
 let voteCountdownHandle = null;
+let isSpectator = false;
+let maxPlayers = 4;
+let isPrivate = false;
+let isHost = false;
+let currentPhase = 'lobby';
 
 const views = {
   landing: document.getElementById('view-landing'),
@@ -26,7 +31,13 @@ function el(id) { return document.getElementById(id); }
 el('createRoomBtn').addEventListener('click', () => {
   const name = el('createName').value.trim();
   if (!name) return showLandingError('Enter a name first.');
-  socket.emit('createRoom', { name });
+  const maxPlayers = Math.max(3, Math.min(8, parseInt(el('createMaxPlayers').value) || 4));
+  const isPrivate = el('createPrivate').checked;
+  socket.emit('createRoom', { name, maxPlayers, isPrivate });
+});
+
+el('refreshGamesBtn').addEventListener('click', () => {
+  socket.emit('getBrowsableRooms', {});
 });
 
 el('joinRoomBtn').addEventListener('click', () => {
@@ -37,10 +48,43 @@ el('joinRoomBtn').addEventListener('click', () => {
   socket.emit('joinRoom', { name, code });
 });
 
+socket.on('roomsList', (rooms) => {
+  const list = el('browsableGamesList');
+  list.innerHTML = '';
+  el('noGamesHint').classList.toggle('hidden', rooms.length > 0);
+
+  rooms.forEach((room) => {
+    const li = document.createElement('li');
+    const timeAgo = formatTimeAgo(room.createdAt);
+    li.innerHTML = `
+      <div style="flex: 1">
+        <strong>${escapeHtml(room.hostName)}'s Game</strong> — ${room.playerCount}/${room.maxPlayers} players (${timeAgo})
+      </div>
+      <button class="join-browse-btn">Join</button>
+    `;
+    const btn = li.querySelector('.join-browse-btn');
+    btn.addEventListener('click', () => {
+      const name = el('browseName').value.trim();
+      if (!name) return showLandingError('Enter a name first.');
+      socket.emit('joinRoom', { name, code: room.code });
+    });
+    list.appendChild(li);
+  });
+});
+
 function showLandingError(msg) {
   const e = el('landingError');
   e.textContent = msg;
   e.classList.remove('hidden');
+}
+
+function formatTimeAgo(timestamp) {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }
 
 socket.on('errorMsg', ({ message }) => {
@@ -53,6 +97,7 @@ socket.on('errorMsg', ({ message }) => {
 socket.on('joinedRoom', ({ code, selfId: id }) => {
   selfId = id;
   roomCode = code;
+  isSpectator = false;
   el('roomBadge').classList.remove('hidden');
   el('roomCodeLabel').textContent = code;
   el('lobbyCode').textContent = code;
@@ -61,8 +106,15 @@ socket.on('joinedRoom', ({ code, selfId: id }) => {
 
 // ---------- Lobby / room state ----------
 socket.on('roomUpdate', (state) => {
+  currentPhase = state.phase;
+  maxPlayers = state.maxPlayers;
+  isPrivate = state.isPrivate;
+  isHost = state.players.some(p => p.id === selfId && p.isHost);
+  isSpectator = state.spectatorCount > 0; // Simplified check
+
   el('scoreboard').classList.remove('hidden');
   renderScoreboard(state.players);
+  updateChatUI(state.phase);
 
   if (state.phase === 'lobby') {
     renderLobby(state);
@@ -72,8 +124,32 @@ socket.on('roomUpdate', (state) => {
   }
 });
 
+function updateChatUI(phase) {
+  if (phase === 'lobby') {
+    el('chatTitle').textContent = 'Lobby Chat';
+  } else {
+    el('chatTitle').textContent = 'Game Chat';
+  }
+}
+
 function renderLobby(state) {
   showView('lobby');
+
+  // Update private badge and player count
+  el('lobbyPrivateBadge').style.display = state.isPrivate ? 'inline' : 'none';
+  el('playerCountInfo').textContent = `${state.players.length}/${state.maxPlayers} players`;
+
+  // Show host settings if user is host
+  const hostSettings = el('hostSettings');
+  if (isHost) {
+    hostSettings.style.display = 'block';
+    el('hostMaxPlayers').value = state.maxPlayers;
+    el('hostPrivate').checked = state.isPrivate;
+  } else {
+    hostSettings.style.display = 'none';
+  }
+
+  // Render players
   const list = el('lobbyPlayers');
   list.innerHTML = '';
   state.players.forEach((p) => {
@@ -81,21 +157,46 @@ function renderLobby(state) {
     li.innerHTML = `<span>${escapeHtml(p.name)}</span> ${p.isHost ? '<span class="tag host">HOST</span>' : ''} ${!p.connected ? '<span class="tag out">offline</span>' : ''}`;
     list.appendChild(li);
   });
+
+  // Render spectators if any
+  if (state.spectatorCount > 0) {
+    el('spectatorsSection').style.display = 'block';
+    // Note: Server doesn't send individual spectator names yet, just count
+    const specList = el('lobbySpectators');
+    specList.innerHTML = `<li>${state.spectatorCount} spectator${state.spectatorCount > 1 ? 's' : ''} watching</li>`;
+  } else {
+    el('spectatorsSection').style.display = 'none';
+  }
+
   const me = state.players.find((p) => p.id === selfId);
   const startBtn = el('startGameBtn');
+  const connectedPlayers = state.players.filter((p) => p.connected).length;
   if (me && me.isHost) {
     startBtn.classList.remove('hidden');
-    startBtn.disabled = state.players.filter((p) => p.connected).length < 2;
+    startBtn.disabled = connectedPlayers < 2;
   } else {
     startBtn.classList.add('hidden');
   }
   el('lobbyHint').textContent =
-    state.players.filter((p) => p.connected).length < 2
+    connectedPlayers < 2
       ? 'Waiting for at least 2 players...'
       : (me && me.isHost ? 'Ready when you are!' : 'Waiting for host to start the game...');
 }
 
 el('startGameBtn').addEventListener('click', () => socket.emit('startGame'));
+
+el('leaveGameBtn').addEventListener('click', () => {
+  socket.emit('disconnect');
+  showView('landing');
+  selfId = null;
+  roomCode = null;
+});
+
+el('applySettingsBtn').addEventListener('click', () => {
+  const maxPlayers = Math.max(3, Math.min(8, parseInt(el('hostMaxPlayers').value) || 4));
+  const isPrivate = el('hostPrivate').checked;
+  socket.emit('updateRoomSettings', { maxPlayers, isPrivate });
+});
 
 function renderScoreboard(players) {
   const list = el('scoreboardList');
@@ -257,11 +358,21 @@ function sendChat() {
   const input = el('chatInput');
   const text = input.value.trim();
   if (!text) return;
-  socket.emit('chatMessage', { text });
+
+  if (currentPhase === 'lobby') {
+    socket.emit('lobbyChat', { text });
+  } else {
+    socket.emit('chatMessage', { text });
+  }
   input.value = '';
 }
 
 socket.on('chatMessage', (msg) => appendChat(msg));
+socket.on('lobbyChatMessage', (msg) => {
+  if (currentPhase === 'lobby') {
+    appendChat(msg);
+  }
+});
 socket.on('chatHistory', (history) => {
   el('chatMessages').innerHTML = '';
   history.forEach(appendChat);

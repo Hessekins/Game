@@ -21,10 +21,21 @@
           <div class="card">
             <h2>Create a Game</h2>
             <input id="createName" type="text" maxlength="20" placeholder="Your name" />
+            <label>
+              <input id="createPrivate" type="checkbox" /> Private Game
+            </label>
+            <label>Max Players: <input id="createMaxPlayers" type="number" min="3" max="8" value="4" style="width: 60px" /></label>
             <button id="createRoomBtn">Create Room</button>
           </div>
           <div class="card">
-            <h2>Join a Game</h2>
+            <h2>Browse Games</h2>
+            <input id="browseName" type="text" maxlength="20" placeholder="Your name" />
+            <button id="refreshGamesBtn">Refresh Games</button>
+            <ul id="browsableGamesList" class="player-list"></ul>
+            <p id="noGamesHint" class="hint hidden">No public games waiting. Create one above!</p>
+          </div>
+          <div class="card">
+            <h2>Join by Code</h2>
             <input id="joinName" type="text" maxlength="20" placeholder="Your name" />
             <input id="joinCode" type="text" maxlength="4" placeholder="Room code" style="text-transform:uppercase" />
             <button id="joinRoomBtn">Join Room</button>
@@ -36,9 +47,24 @@
         <div id="view-lobby" class="view hidden">
           <div class="card">
             <h2>Lobby</h2>
-            <p>Share this code with friends: <strong id="lobbyCode"></strong></p>
+            <p>Share this code with friends: <strong id="lobbyCode"></strong> <span id="lobbyPrivateBadge" class="tag" style="display:none">PRIVATE</span></p>
+            <p id="playerCountInfo" class="hint"></p>
+            <div id="hostSettings" class="card" style="margin-top: 10px; display:none">
+              <h3>Room Settings</h3>
+              <label>Max Players: <input id="hostMaxPlayers" type="number" min="3" max="8" style="width: 60px" /></label>
+              <label>
+                <input id="hostPrivate" type="checkbox" /> Private Game
+              </label>
+              <button id="applySettingsBtn">Apply Settings</button>
+            </div>
+            <h3>Players</h3>
             <ul id="lobbyPlayers" class="player-list"></ul>
+            <div id="spectatorsSection" style="display:none">
+              <h3>Spectators</h3>
+              <ul id="lobbySpectators" class="player-list"></ul>
+            </div>
             <button id="startGameBtn" class="hidden">Start Game</button>
+            <button id="leaveGameBtn">Leave Game</button>
             <p id="lobbyHint" class="hint"></p>
           </div>
         </div>
@@ -96,7 +122,7 @@
       </section>
 
       <aside class="chat-panel" id="chatPanel">
-        <h2>Chat</h2>
+        <h2 id="chatTitle">Lobby Chat</h2>
         <div id="chatMessages" class="chat-messages"></div>
         <div class="chat-input-row">
           <input id="chatInput" type="text" maxlength="300" placeholder="Say something..." />

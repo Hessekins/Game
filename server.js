@@ -18,6 +18,9 @@ const RESULTS_SECONDS = 12;
 const TOTAL_ROUNDS = 3;
 const MIN_PLAYERS = 2;
 const MAX_CHAT_HISTORY = 100;
+const MAX_PLAYERS_MIN = 3;
+const MAX_PLAYERS_MAX = 8;
+const DEFAULT_MAX_PLAYERS = 4;
 
 // Weighted letter pool (roughly English letter frequency) so rounds stay playable.
 const LETTER_POOL =
@@ -50,12 +53,16 @@ function generateRoomCode() {
 // rooms: code -> room object
 const rooms = new Map();
 
-function createRoom(hostSocketId, hostName) {
+// Global lobby chat (separate from in-game room chat)
+const lobbyChat = [];
+
+function createRoom(hostSocketId, hostName, { maxPlayers = DEFAULT_MAX_PLAYERS, isPrivate = false } = {}) {
   const code = generateRoomCode();
   const room = {
     code,
     hostId: hostSocketId,
     players: new Map(), // id -> { id, name, score, connected, isHost }
+    spectators: new Set(), // socketIds of players who joined after game started
     phase: 'lobby', // lobby | submitting | voting | results | gameover
     round: 0, // 1..TOTAL_ROUNDS, or tiebreaker round number
     isTiebreaker: false,
@@ -68,7 +75,10 @@ function createRoom(hostSocketId, hostName) {
     anonOrder: [], // shuffled list of playerIds with submissions, for voting display
     timer: null,
     timerEndsAt: null,
-    chat: [],
+    roomChat: [], // in-game chat (separate from global lobbyChat)
+    maxPlayers: Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, maxPlayers)),
+    isPrivate,
+    createdAt: Date.now(),
   };
   rooms.set(code, room);
   return room;
@@ -120,6 +130,9 @@ function roomStateForClients(room) {
     isTiebreaker: room.isTiebreaker,
     players: publicPlayers(room),
     timerEndsAt: room.timerEndsAt,
+    maxPlayers: room.maxPlayers,
+    isPrivate: room.isPrivate,
+    spectatorCount: room.spectators.size,
   };
 }
 
@@ -365,9 +378,15 @@ function endGame(room, winnerId) {
 }
 
 function pushChat(room, entry) {
-  room.chat.push(entry);
-  if (room.chat.length > MAX_CHAT_HISTORY) room.chat.shift();
+  room.roomChat.push(entry);
+  if (room.roomChat.length > MAX_CHAT_HISTORY) room.roomChat.shift();
   io.to(room.code).emit('chatMessage', entry);
+}
+
+function pushLobbyChat(entry) {
+  lobbyChat.push(entry);
+  if (lobbyChat.length > MAX_CHAT_HISTORY) lobbyChat.shift();
+  io.emit('lobbyChatMessage', entry);
 }
 
 function reassignHostIfNeeded(room) {
@@ -378,11 +397,11 @@ function reassignHostIfNeeded(room) {
 
 // ---------- Socket handlers ----------
 io.on('connection', (socket) => {
-  socket.on('createRoom', ({ name }) => {
+  socket.on('createRoom', ({ name, maxPlayers, isPrivate }) => {
     if (!name || typeof name !== 'string' || !name.trim()) {
       return sendError(socket, 'Please enter a name.');
     }
-    const room = createRoom(socket.id, name);
+    const room = createRoom(socket.id, name, { maxPlayers, isPrivate });
     addPlayer(room, socket.id, name);
     socket.join(room.code);
     socket.data.roomCode = room.code;
@@ -396,14 +415,29 @@ io.on('connection', (socket) => {
     }
     const room = rooms.get((code || '').toUpperCase());
     if (!room) return sendError(socket, 'Room not found.');
-    if (room.phase !== 'lobby') {
-      return sendError(socket, 'That game has already started.');
+    if (room.isPrivate && room.phase !== 'lobby') {
+      return sendError(socket, 'That game is private and has already started.');
     }
-    addPlayer(room, socket.id, name);
+
+    // Can only join as regular player if in lobby and not full
+    if (room.phase === 'lobby') {
+      if (room.players.size >= room.maxPlayers) {
+        return sendError(socket, 'Game is full.');
+      }
+      addPlayer(room, socket.id, name);
+    } else {
+      // Game already started - join as spectator
+      if (room.isPrivate) {
+        return sendError(socket, 'Cannot join private game after it has started.');
+      }
+      addPlayer(room, socket.id, name);
+      room.spectators.add(socket.id);
+    }
+
     socket.join(room.code);
     socket.data.roomCode = room.code;
     socket.emit('joinedRoom', { code: room.code, selfId: socket.id });
-    socket.emit('chatHistory', room.chat);
+    socket.emit('chatHistory', room.roomChat);
     broadcastRoomState(room);
   });
 
@@ -442,11 +476,73 @@ io.on('connection', (socket) => {
     checkAllVoted(room);
   });
 
+  socket.on('getBrowsableRooms', () => {
+    const browsableRooms = [];
+    for (const room of rooms.values()) {
+      if (room.isPrivate) continue; // Skip private rooms
+      if (room.phase !== 'lobby') continue; // Only show waiting rooms
+      if (room.players.size >= room.maxPlayers) continue; // Skip full rooms
+
+      const hostName = room.players.get(room.hostId)?.name || 'Unknown';
+      browsableRooms.push({
+        code: room.code,
+        hostName,
+        playerCount: room.players.size,
+        maxPlayers: room.maxPlayers,
+        createdAt: room.createdAt,
+      });
+    }
+    // Sort by newest first
+    browsableRooms.sort((a, b) => b.createdAt - a.createdAt);
+    socket.emit('roomsList', browsableRooms);
+  });
+
+  socket.on('updateRoomSettings', ({ maxPlayers, isPrivate }) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    if (socket.id !== room.hostId) return sendError(socket, 'Only the host can change settings.');
+    if (room.phase !== 'lobby') return sendError(socket, 'Cannot change settings after game starts.');
+
+    if (maxPlayers !== undefined) {
+      room.maxPlayers = Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, maxPlayers));
+      // If max decreased below current players, keep them but prevent new joins
+      if (room.players.size > room.maxPlayers) {
+        return sendError(socket, 'Max players cannot be less than current player count.');
+      }
+    }
+    if (isPrivate !== undefined) {
+      room.isPrivate = Boolean(isPrivate);
+    }
+    broadcastRoomState(room);
+  });
+
+  socket.on('lobbyChat', ({ text }) => {
+    if (!text || !text.trim()) return;
+    // Anyone can chat in lobby
+    // Find player name from any room they're in
+    let playerName = 'Guest';
+    for (const room of rooms.values()) {
+      if (room.players.has(socket.id)) {
+        playerName = room.players.get(socket.id).name;
+        break;
+      }
+    }
+    pushLobbyChat({
+      name: playerName,
+      text: text.trim().slice(0, 300),
+      time: Date.now(),
+    });
+  });
+
   socket.on('chatMessage', ({ text }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
     const player = room.players.get(socket.id);
     if (!player || !text || !text.trim()) return;
+
+    // Only allow chat if in game or spectating
+    if (room.phase === 'lobby') return; // Lobby chat uses separate lobbyChat event
+
     pushChat(room, {
       name: player.name,
       text: text.trim().slice(0, 300),
@@ -460,6 +556,7 @@ io.on('connection', (socket) => {
     const player = room.players.get(socket.id);
     if (!player) return;
     player.connected = false;
+    room.spectators.delete(socket.id); // Remove from spectators if was one
     reassignHostIfNeeded(room);
 
     if (room.phase === 'submitting') checkAllSubmitted(room);
