@@ -2,14 +2,116 @@ const path = require('path');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: { origin: '*' }
+});
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ---------- Database setup ----------
+const db = new sqlite3.Database(path.join(__dirname, 'game.db'), (err) => {
+  if (err) {
+    console.error('Database error:', err);
+  } else {
+    console.log('Connected to SQLite database');
+    initializeDatabase();
+  }
+});
+
+function initializeDatabase() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+}
+
+function hashPassword(password) {
+  return bcrypt.hashSync(password, 10);
+}
+
+function verifyPassword(password, hash) {
+  return bcrypt.compareSync(password, hash);
+}
+
+function generateToken(userId, username) {
+  return jwt.sign({ userId, username }, JWT_SECRET, { expiresIn: '7d' });
+}
+
+function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
+// ---------- Authentication endpoints ----------
+app.post('/api/register', (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+
+  if (username.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  db.run(
+    'INSERT INTO users (username, password) VALUES (?, ?)',
+    [username, hashPassword(password)],
+    function(err) {
+      if (err) {
+        if (err.message.includes('UNIQUE constraint failed')) {
+          return res.status(409).json({ error: 'Username already exists' });
+        }
+        return res.status(500).json({ error: 'Registration failed' });
+      }
+
+      const token = generateToken(this.lastID, username);
+      res.json({ success: true, token, userId: this.lastID, username });
+    }
+  );
+});
+
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
+  }
+
+  db.get('SELECT id, username, password FROM users WHERE username = ?', [username], (err, user) => {
+    if (err) {
+      return res.status(500).json({ error: 'Login failed' });
+    }
+
+    if (!user || !verifyPassword(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = generateToken(user.id, user.username);
+    res.json({ success: true, token, userId: user.id, username: user.username });
+  });
+});
 
 // ---------- Game constants ----------
 const VOTE_SECONDS = 30;
@@ -450,6 +552,23 @@ function reassignHostIfNeeded(room) {
   const next = connectedPlayers(room)[0];
   if (next) room.hostId = next.id;
 }
+
+// ---------- Socket authentication middleware ----------
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (!token) {
+    return next(new Error('Authentication error'));
+  }
+
+  const decoded = verifyToken(token);
+  if (!decoded) {
+    return next(new Error('Invalid token'));
+  }
+
+  socket.userId = decoded.userId;
+  socket.username = decoded.username;
+  next();
+});
 
 // ---------- Socket handlers ----------
 io.on('connection', (socket) => {

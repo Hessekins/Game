@@ -1,8 +1,11 @@
-const socket = io();
+let socket = null;
+let authToken = localStorage.getItem('authToken');
+let userId = null;
+let username = null;
 
 let selfId = null;
 let roomCode = null;
-let playerName = localStorage.getItem('playerName');
+let playerName = null;
 let currentLetters = [];
 let submitCountdownHandle = null;
 let voteCountdownHandle = null;
@@ -13,6 +16,8 @@ let isHost = false;
 let currentPhase = 'lobby';
 
 const views = {
+  login: document.getElementById('view-login'),
+  register: document.getElementById('view-register'),
   'name-entry': document.getElementById('view-name-entry'),
   'game-browser': document.getElementById('view-game-browser'),
   lobby: document.getElementById('view-lobby'),
@@ -29,41 +34,166 @@ function showView(name) {
 
 function el(id) { return document.getElementById(id); }
 
-// ---------- Name Entry ----------
-el('enterGameBtn').addEventListener('click', () => {
-  const name = el('playerName').value.trim();
-  if (!name) return showNameError('Enter a name first.');
-  playerName = name;
-  localStorage.setItem('playerName', playerName);
-  el('nameError').classList.add('hidden');
-  showView('game-browser');
-  socket.emit('enterGameBrowser', { name: playerName });
-});
-
-el('playerName').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') el('enterGameBtn').click();
-});
-
-function showNameError(msg) {
-  el('nameError').textContent = msg;
-  el('nameError').classList.remove('hidden');
+// ---------- Authentication ----------
+function showLoginError(msg) {
+  el('loginError').textContent = msg;
+  el('loginError').classList.remove('hidden');
 }
 
-// On load, check if we have a saved player name and/or room code
-const savedRoomCode = localStorage.getItem('roomCode');
-if (playerName && savedRoomCode) {
-  // Rejoin the room after name is restored
-  showView('lobby');
-  socket.emit('rejoinRoom', { name: playerName, code: savedRoomCode });
-} else if (playerName) {
-  showView('game-browser');
-  socket.emit('enterGameBrowser', { name: playerName });
+function showRegisterError(msg) {
+  el('registerError').textContent = msg;
+  el('registerError').classList.remove('hidden');
+}
+
+el('loginBtn').addEventListener('click', async () => {
+  const username = el('loginUsername').value.trim();
+  const password = el('loginPassword').value.trim();
+
+  if (!username || !password) {
+    return showLoginError('Username and password required.');
+  }
+
+  try {
+    const response = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return showLoginError(data.error || 'Login failed.');
+    }
+
+    // Store auth token and user info
+    authToken = data.token;
+    userId = data.userId;
+    username = data.username;
+    playerName = username;
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('userId', userId);
+    localStorage.setItem('username', username);
+
+    el('loginError').classList.add('hidden');
+    showUserInfo();
+    initializeSocket();
+  } catch (err) {
+    showLoginError('Login failed: ' + err.message);
+  }
+});
+
+el('registerBtn').addEventListener('click', async () => {
+  const username = el('registerUsername').value.trim();
+  const password = el('registerPassword').value.trim();
+  const passwordConfirm = el('registerPasswordConfirm').value.trim();
+
+  if (!username || !password) {
+    return showRegisterError('Username and password required.');
+  }
+
+  if (password !== passwordConfirm) {
+    return showRegisterError('Passwords do not match.');
+  }
+
+  try {
+    const response = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      return showRegisterError(data.error || 'Registration failed.');
+    }
+
+    // Store auth token and user info
+    authToken = data.token;
+    userId = data.userId;
+    username = data.username;
+    playerName = username;
+    localStorage.setItem('authToken', authToken);
+    localStorage.setItem('userId', userId);
+    localStorage.setItem('username', username);
+
+    el('registerError').classList.add('hidden');
+    showUserInfo();
+    initializeSocket();
+  } catch (err) {
+    showRegisterError('Registration failed: ' + err.message);
+  }
+});
+
+el('goToLoginLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  el('loginError').classList.add('hidden');
+  el('registerError').classList.add('hidden');
+  showView('login');
+});
+
+el('goToRegisterLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  el('loginError').classList.add('hidden');
+  el('registerError').classList.add('hidden');
+  showView('register');
+});
+
+// Initialize socket connection with auth token
+function initializeSocket() {
+  socket = io({
+    auth: {
+      token: authToken,
+    },
+  });
+
+  setupSocketListeners();
+
+  const savedRoomCode = localStorage.getItem('roomCode');
+  if (savedRoomCode) {
+    showView('lobby');
+    socket.emit('rejoinRoom', { name: playerName, code: savedRoomCode });
+  } else {
+    showView('game-browser');
+    socket.emit('enterGameBrowser', { name: playerName });
+  }
+}
+
+// Logout handler
+el('logoutBtn').addEventListener('click', () => {
+  authToken = null;
+  userId = null;
+  username = null;
+  playerName = null;
+  localStorage.removeItem('authToken');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('username');
+  localStorage.removeItem('roomCode');
+  if (socket) socket.disconnect();
+  showView('login');
+  el('userInfo').classList.add('hidden');
+});
+
+// Function to show user info
+function showUserInfo() {
+  el('usernameDisplay').textContent = username;
+  el('userInfo').classList.remove('hidden');
+}
+
+// On page load, check if already authenticated
+if (authToken && localStorage.getItem('username')) {
+  userId = localStorage.getItem('userId');
+  username = localStorage.getItem('username');
+  playerName = username;
+  showUserInfo();
+  initializeSocket();
 } else {
-  showView('name-entry');
+  showView('login');
 }
 
-// Handle rejoin response
-socket.on('rejoinedRoom', ({ code, selfId: id, success }) => {
+// Setup socket event listeners (called after authentication)
+function setupSocketListeners() {
+  // Handle rejoin response
+  socket.on('rejoinedRoom', ({ code, selfId: id, success }) => {
   if (success) {
     selfId = id;
     roomCode = code;
@@ -502,10 +632,11 @@ socket.on('lobbyChatMessage', (msg) => {
     appendChat(msg);
   }
 });
-socket.on('chatHistory', (history) => {
-  el('chatMessages').innerHTML = '';
-  history.forEach(appendChat);
-});
+  socket.on('chatHistory', (history) => {
+    el('chatMessages').innerHTML = '';
+    history.forEach(appendChat);
+  });
+}
 
 function appendChat(msg) {
   const div = document.createElement('div');

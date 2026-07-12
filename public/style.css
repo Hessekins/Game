@@ -45,6 +45,22 @@ body {
   letter-spacing: 1px;
 }
 
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel-2);
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.user-info #usernameDisplay {
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .layout {
   display: grid;
   grid-template-columns: 1fr 320px;

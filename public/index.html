@@ -10,14 +10,47 @@
   <div id="app">
     <header class="topbar">
       <h1>Acronym Showdown</h1>
-      <div id="roomBadge" class="room-badge hidden">Room <span id="roomCodeLabel"></span></div>
+      <div style="display: flex; gap: 20px; align-items: center;">
+        <div id="roomBadge" class="room-badge hidden">Room <span id="roomCodeLabel"></span></div>
+        <div id="userInfo" class="user-info hidden">
+          <span id="usernameDisplay"></span>
+          <button id="logoutBtn" style="font-size: 0.9rem; padding: 6px 12px;">Logout</button>
+        </div>
+      </div>
     </header>
 
     <main class="layout">
       <section class="main-panel">
 
-        <!-- Name Entry -->
-        <div id="view-name-entry" class="view">
+        <!-- Login -->
+        <div id="view-login" class="view">
+          <div class="card" style="max-width: 400px; margin: 40px auto;">
+            <h2>Login</h2>
+            <p class="hint">Sign in to play Acronym Showdown</p>
+            <input id="loginUsername" type="text" maxlength="20" placeholder="Username" />
+            <input id="loginPassword" type="password" placeholder="Password" />
+            <button id="loginBtn">Login</button>
+            <p id="loginError" class="error hidden"></p>
+            <p class="hint" style="margin-top: 20px;">Don't have an account? <a href="#" id="goToRegisterLink" style="color: var(--accent); cursor: pointer;">Sign up</a></p>
+          </div>
+        </div>
+
+        <!-- Register -->
+        <div id="view-register" class="view hidden">
+          <div class="card" style="max-width: 400px; margin: 40px auto;">
+            <h2>Create Account</h2>
+            <p class="hint">Join Acronym Showdown</p>
+            <input id="registerUsername" type="text" maxlength="20" placeholder="Username (3+ chars)" />
+            <input id="registerPassword" type="password" placeholder="Password (6+ chars)" />
+            <input id="registerPasswordConfirm" type="password" placeholder="Confirm password" />
+            <button id="registerBtn">Create Account</button>
+            <p id="registerError" class="error hidden"></p>
+            <p class="hint" style="margin-top: 20px;">Already have an account? <a href="#" id="goToLoginLink" style="color: var(--accent); cursor: pointer;">Sign in</a></p>
+          </div>
+        </div>
+
+        <!-- Name Entry (fallback, kept for compatibility) -->
+        <div id="view-name-entry" class="view hidden">
           <div class="card" style="max-width: 400px; margin: 40px auto;">
             <h2>Welcome!</h2>
             <p class="hint">Enter your name to get started</p>
