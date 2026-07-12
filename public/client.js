@@ -2,6 +2,7 @@ const socket = io();
 
 let selfId = null;
 let roomCode = null;
+let playerName = null;
 let currentLetters = [];
 let submitCountdownHandle = null;
 let voteCountdownHandle = null;
@@ -12,7 +13,8 @@ let isHost = false;
 let currentPhase = 'lobby';
 
 const views = {
-  landing: document.getElementById('view-landing'),
+  'name-entry': document.getElementById('view-name-entry'),
+  'game-browser': document.getElementById('view-game-browser'),
   lobby: document.getElementById('view-lobby'),
   submitting: document.getElementById('view-submitting'),
   voting: document.getElementById('view-voting'),
@@ -27,28 +29,46 @@ function showView(name) {
 
 function el(id) { return document.getElementById(id); }
 
-// ---------- Landing ----------
-el('createRoomBtn').addEventListener('click', () => {
-  const name = el('createName').value.trim();
-  if (!name) return showLandingError('Enter a name first.');
-  const maxPlayers = Math.max(3, Math.min(8, parseInt(el('createMaxPlayers').value) || 4));
-  const isPrivate = el('createPrivate').checked;
-  socket.emit('createRoom', { name, maxPlayers, isPrivate });
+// ---------- Name Entry ----------
+el('enterGameBtn').addEventListener('click', () => {
+  const name = el('playerName').value.trim();
+  if (!name) return showNameError('Enter a name first.');
+  playerName = name;
+  el('nameError').classList.add('hidden');
+  showView('game-browser');
+  socket.emit('enterGameBrowser', {});
 });
 
-el('refreshGamesBtn').addEventListener('click', () => {
-  socket.emit('getBrowsableRooms', {});
+el('playerName').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') el('enterGameBtn').click();
+});
+
+function showNameError(msg) {
+  el('nameError').textContent = msg;
+  el('nameError').classList.remove('hidden');
+}
+
+// Show name entry on first load
+showView('name-entry');
+
+// ---------- Game Browser ----------
+el('createRoomBtn').addEventListener('click', () => {
+  const maxPlayers = Math.max(3, Math.min(8, parseInt(el('createMaxPlayers').value) || 4));
+  const isPrivate = el('createPrivate').checked;
+  socket.emit('createRoom', { name: playerName, maxPlayers, isPrivate });
 });
 
 el('joinRoomBtn').addEventListener('click', () => {
-  const name = el('joinName').value.trim();
   const code = el('joinCode').value.trim().toUpperCase();
-  if (!name) return showLandingError('Enter a name first.');
-  if (!code) return showLandingError('Enter a room code.');
-  socket.emit('joinRoom', { name, code });
+  if (!code) return showBrowserError('Enter a room code.');
+  socket.emit('joinRoom', { name: playerName, code });
 });
 
 socket.on('roomsList', (rooms) => {
+  renderGamesList(rooms);
+});
+
+function renderGamesList(rooms) {
   const list = el('browsableGamesList');
   list.innerHTML = '';
   el('noGamesHint').classList.toggle('hidden', rooms.length > 0);
@@ -64,18 +84,17 @@ socket.on('roomsList', (rooms) => {
     `;
     const btn = li.querySelector('.join-browse-btn');
     btn.addEventListener('click', () => {
-      const name = el('browseName').value.trim();
-      if (!name) return showLandingError('Enter a name first.');
-      socket.emit('joinRoom', { name, code: room.code });
+      socket.emit('joinRoom', { name: playerName, code: room.code });
     });
     list.appendChild(li);
   });
-});
+}
 
-function showLandingError(msg) {
-  const e = el('landingError');
+function showBrowserError(msg) {
+  const e = el('browserError');
   e.textContent = msg;
   e.classList.remove('hidden');
+  setTimeout(() => e.classList.add('hidden'), 4000);
 }
 
 function formatTimeAgo(timestamp) {
@@ -88,7 +107,7 @@ function formatTimeAgo(timestamp) {
 }
 
 socket.on('errorMsg', ({ message }) => {
-  showLandingError(message);
+  showBrowserError(message);
   el('submitError').textContent = message;
   el('submitError').classList.remove('hidden');
   setTimeout(() => el('submitError').classList.add('hidden'), 4000);
@@ -178,8 +197,8 @@ function renderLobby(state) {
     startBtn.classList.add('hidden');
   }
   el('lobbyHint').textContent =
-    connectedPlayers < 2
-      ? 'Waiting for at least 2 players...'
+    connectedPlayers < 3
+      ? 'Waiting for at least 3 players...'
       : (me && me.isHost ? 'Ready when you are!' : 'Waiting for host to start the game...');
 }
 
@@ -192,13 +211,13 @@ el('startGameBtn').addEventListener('click', () => socket.emit('startGame'));
 });
 
 socket.on('leftRoom', () => {
-  showView('landing');
+  showView('game-browser');
   selfId = null;
   roomCode = null;
   isSpectator = false;
   el('roomBadge').classList.add('hidden');
-  // Clear chat when leaving
   el('chatMessages').innerHTML = '';
+  socket.emit('enterGameBrowser', {});
 });
 
 el('applySettingsBtn').addEventListener('click', () => {

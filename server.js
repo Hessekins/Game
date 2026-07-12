@@ -140,6 +140,26 @@ function broadcastRoomState(room) {
   io.to(room.code).emit('roomUpdate', roomStateForClients(room));
 }
 
+function broadcastBrowsableRooms() {
+  const browsableRooms = [];
+  for (const room of rooms.values()) {
+    if (room.isPrivate) continue;
+    if (room.phase !== 'lobby') continue;
+    if (room.players.size >= room.maxPlayers) continue;
+
+    const hostName = room.players.get(room.hostId)?.name || 'Unknown';
+    browsableRooms.push({
+      code: room.code,
+      hostName,
+      playerCount: room.players.size,
+      maxPlayers: room.maxPlayers,
+      createdAt: room.createdAt,
+    });
+  }
+  browsableRooms.sort((a, b) => b.createdAt - a.createdAt);
+  io.to('browsing').emit('roomsList', browsableRooms);
+}
+
 function sendError(socket, message) {
   socket.emit('errorMsg', { message });
 }
@@ -407,6 +427,7 @@ io.on('connection', (socket) => {
     socket.data.roomCode = room.code;
     socket.emit('joinedRoom', { code: room.code, selfId: socket.id });
     broadcastRoomState(room);
+    if (!room.isPrivate) broadcastBrowsableRooms();
   });
 
   socket.on('joinRoom', ({ code, name }) => {
@@ -439,6 +460,7 @@ io.on('connection', (socket) => {
     socket.emit('joinedRoom', { code: room.code, selfId: socket.id });
     socket.emit('chatHistory', room.roomChat);
     broadcastRoomState(room);
+    if (!room.isPrivate && room.phase === 'lobby') broadcastBrowsableRooms();
   });
 
   socket.on('startGame', () => {
@@ -449,6 +471,7 @@ io.on('connection', (socket) => {
       return sendError(socket, `Need at least ${MIN_PLAYERS} players to start.`);
     }
     startGame(room);
+    broadcastBrowsableRooms();
   });
 
   socket.on('submitAnswer', ({ text }) => {
@@ -497,6 +520,11 @@ io.on('connection', (socket) => {
     socket.emit('roomsList', browsableRooms);
   });
 
+  socket.on('enterGameBrowser', () => {
+    socket.join('browsing');
+    broadcastBrowsableRooms();
+  });
+
   socket.on('updateRoomSettings', ({ maxPlayers, isPrivate }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
@@ -514,6 +542,7 @@ io.on('connection', (socket) => {
       room.isPrivate = Boolean(isPrivate);
     }
     broadcastRoomState(room);
+    broadcastBrowsableRooms();
   });
 
   socket.on('lobbyChat', ({ text }) => {
@@ -572,6 +601,7 @@ io.on('connection', (socket) => {
     if (connectedPlayers(room).length === 0) {
       clearTimer(room);
       rooms.delete(room.code);
+      broadcastBrowsableRooms();
     }
 
     socket.emit('leftRoom', {});
@@ -594,6 +624,7 @@ io.on('connection', (socket) => {
     if (connectedPlayers(room).length === 0) {
       clearTimer(room);
       rooms.delete(room.code);
+      broadcastBrowsableRooms();
     }
   });
 });

@@ -16,11 +16,27 @@
     <main class="layout">
       <section class="main-panel">
 
-        <!-- Landing: create or join -->
-        <div id="view-landing" class="view">
+        <!-- Name Entry -->
+        <div id="view-name-entry" class="view">
+          <div class="card" style="max-width: 400px; margin: 40px auto;">
+            <h2>Welcome!</h2>
+            <p class="hint">Enter your name to get started</p>
+            <input id="playerName" type="text" maxlength="20" placeholder="Your name" />
+            <button id="enterGameBtn">Enter Game Lobby</button>
+            <p id="nameError" class="error hidden"></p>
+          </div>
+        </div>
+
+        <!-- Game Browser (main view after name entry) -->
+        <div id="view-game-browser" class="view hidden">
+          <div class="card">
+            <h2>Available Games</h2>
+            <p class="hint">Join a game waiting for players</p>
+            <ul id="browsableGamesList" class="player-list"></ul>
+            <p id="noGamesHint" class="hint hidden">No public games waiting. Create one below!</p>
+          </div>
           <div class="card">
             <h2>Create a Game</h2>
-            <input id="createName" type="text" maxlength="20" placeholder="Your name" />
             <label>
               <input id="createPrivate" type="checkbox" /> Private Game
             </label>
@@ -28,19 +44,11 @@
             <button id="createRoomBtn">Create Room</button>
           </div>
           <div class="card">
-            <h2>Browse Games</h2>
-            <input id="browseName" type="text" maxlength="20" placeholder="Your name" />
-            <button id="refreshGamesBtn">Refresh Games</button>
-            <ul id="browsableGamesList" class="player-list"></ul>
-            <p id="noGamesHint" class="hint hidden">No public games waiting. Create one above!</p>
-          </div>
-          <div class="card">
             <h2>Join by Code</h2>
-            <input id="joinName" type="text" maxlength="20" placeholder="Your name" />
             <input id="joinCode" type="text" maxlength="4" placeholder="Room code" style="text-transform:uppercase" />
             <button id="joinRoomBtn">Join Room</button>
+            <p id="browserError" class="error hidden"></p>
           </div>
-          <p id="landingError" class="error hidden"></p>
         </div>
 
         <!-- Lobby -->
