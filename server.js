@@ -65,6 +65,10 @@ const rooms = new Map();
 // Global lobby chat (separate from in-game room chat)
 const lobbyChat = [];
 
+// Global players tracking: socketId -> { id, name, status }
+// status: 'browsing' | 'waiting' | 'playing'
+const players = new Map();
+
 function createRoom(hostSocketId, hostName, { maxPlayers = DEFAULT_MAX_PLAYERS, maxLetters = DEFAULT_MAX_LETTERS, submitDurationSeconds = DEFAULT_SUBMIT_SECONDS, roundsToPlay = DEFAULT_ROUNDS, isPrivate = false } = {}) {
   const code = generateRoomCode();
   const room = {
@@ -173,6 +177,23 @@ function broadcastBrowsableRooms() {
   }
   browsableRooms.sort((a, b) => b.createdAt - a.createdAt);
   io.to('browsing').emit('roomsList', browsableRooms);
+}
+
+function broadcastPlayersList() {
+  const playerList = Array.from(players.values()).map(p => ({
+    id: p.id,
+    name: p.name,
+    status: p.status,
+  }));
+  io.to('browsing').emit('playersList', playerList);
+}
+
+function updatePlayerStatus(socketId, status) {
+  const player = players.get(socketId);
+  if (player) {
+    player.status = status;
+    broadcastPlayersList();
+  }
 }
 
 function sendError(socket, message) {
@@ -471,10 +492,12 @@ io.on('connection', (socket) => {
     }
 
     socket.join(room.code);
+    socket.leave('browsing');
     socket.data.roomCode = room.code;
     socket.emit('joinedRoom', { code: room.code, selfId: socket.id });
     socket.emit('chatHistory', room.roomChat);
     broadcastRoomState(room);
+    updatePlayerStatus(socket.id, room.phase === 'lobby' ? 'waiting' : 'playing');
     if (!room.isPrivate && room.phase === 'lobby') broadcastBrowsableRooms();
   });
 
@@ -487,6 +510,9 @@ io.on('connection', (socket) => {
     }
     startGame(room);
     broadcastBrowsableRooms();
+    for (const player of room.players.values()) {
+      updatePlayerStatus(player.id, 'playing');
+    }
   });
 
   socket.on('submitAnswer', ({ text }) => {
@@ -535,9 +561,15 @@ io.on('connection', (socket) => {
     socket.emit('roomsList', browsableRooms);
   });
 
-  socket.on('enterGameBrowser', () => {
+  socket.on('enterGameBrowser', ({ name }) => {
     socket.join('browsing');
+    players.set(socket.id, {
+      id: socket.id,
+      name: (name || 'Guest').slice(0, 20),
+      status: 'browsing',
+    });
     broadcastBrowsableRooms();
+    broadcastPlayersList();
   });
 
   socket.on('updateRoomSettings', ({ maxPlayers, maxLetters, submitDurationSeconds, roundsToPlay, isPrivate }) => {
@@ -630,6 +662,7 @@ io.on('connection', (socket) => {
     room.players.delete(socket.id);
     room.spectators.delete(socket.id);
     socket.leave(room.code);
+    socket.join('browsing');
     socket.data.roomCode = null;
 
     reassignHostIfNeeded(room);
@@ -645,10 +678,14 @@ io.on('connection', (socket) => {
       broadcastBrowsableRooms();
     }
 
+    updatePlayerStatus(socket.id, 'browsing');
     socket.emit('leftRoom', {});
   });
 
   socket.on('disconnect', () => {
+    players.delete(socket.id);
+    broadcastPlayersList();
+
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
     const player = room.players.get(socket.id);

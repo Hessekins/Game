@@ -36,7 +36,7 @@ el('enterGameBtn').addEventListener('click', () => {
   playerName = name;
   el('nameError').classList.add('hidden');
   showView('game-browser');
-  socket.emit('enterGameBrowser', {});
+  socket.emit('enterGameBrowser', { name: playerName });
 });
 
 el('playerName').addEventListener('keydown', (e) => {
@@ -104,6 +104,42 @@ function formatTimeAgo(timestamp) {
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   return `${hours}h ago`;
+}
+
+// ---------- Players Online ----------
+socket.on('playersList', (players) => {
+  renderPlayersList(players);
+});
+
+function renderPlayersList(players) {
+  const list = el('playersList');
+  const filteredPlayers = players.filter(p => p.id !== selfId);
+
+  if (filteredPlayers.length === 0) {
+    list.innerHTML = '';
+    el('noPlayersHint').classList.remove('hidden');
+    return;
+  }
+
+  el('noPlayersHint').classList.add('hidden');
+  list.innerHTML = '';
+
+  filteredPlayers.forEach((p) => {
+    const div = document.createElement('div');
+    div.className = 'player-item';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'name';
+    nameSpan.textContent = p.name;
+
+    const statusSpan = document.createElement('span');
+    statusSpan.className = `status ${p.status}`;
+    statusSpan.textContent = p.status === 'browsing' ? 'Browsing' : (p.status === 'waiting' ? 'Waiting' : 'Playing');
+
+    div.appendChild(nameSpan);
+    div.appendChild(statusSpan);
+    list.appendChild(div);
+  });
 }
 
 socket.on('errorMsg', ({ message }) => {

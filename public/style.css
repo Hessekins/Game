@@ -194,7 +194,17 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: var(--good);
 }
 
-.chat-panel {
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 20px;
+  height: fit-content;
+  max-height: 90vh;
+}
+
+.info-panel, .chat-panel {
   background: var(--panel);
   border: 1px solid #2a2e42;
   border-radius: 14px;
@@ -202,18 +212,54 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   display: flex;
   flex-direction: column;
   height: fit-content;
-  max-height: 80vh;
-  position: sticky;
-  top: 20px;
+  overflow-y: auto;
 }
 
-.chat-panel h2 { margin-top: 0; font-size: 1.1rem; }
+.info-panel h2, .chat-panel h2 { margin-top: 0; font-size: 1.1rem; }
+
+.info-panel {
+  max-height: 30vh;
+}
+
+.chat-panel {
+  max-height: 50vh;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.players-list .player-item {
+  background: var(--panel-2);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-item .name { font-weight: 600; }
+.player-item .status {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.player-item .status.browsing { background: var(--accent); color: white; }
+.player-item .status.waiting { background: #f59e0b; color: white; }
+.player-item .status.playing { background: var(--good); color: white; }
 
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  min-height: 200px;
-  max-height: 50vh;
+  min-height: 150px;
+  max-height: 40vh;
   display: flex;
   flex-direction: column;
   gap: 6px;

@@ -136,12 +136,20 @@
 
       </section>
 
-      <aside class="chat-panel" id="chatPanel">
-        <h2 id="chatTitle">Lobby Chat</h2>
-        <div id="chatMessages" class="chat-messages"></div>
-        <div class="chat-input-row">
-          <input id="chatInput" type="text" maxlength="300" placeholder="Say something..." />
-          <button id="chatSendBtn">Send</button>
+      <aside class="sidebar" id="sidebar">
+        <div class="info-panel" id="playersPanel">
+          <h2>Players Online</h2>
+          <div id="playersList" class="players-list"></div>
+          <p id="noPlayersHint" class="hint hidden">No other players online</p>
+        </div>
+
+        <div class="chat-panel" id="chatPanel">
+          <h2 id="chatTitle">Lobby Chat</h2>
+          <div id="chatMessages" class="chat-messages"></div>
+          <div class="chat-input-row">
+            <input id="chatInput" type="text" maxlength="300" placeholder="Say something..." />
+            <button id="chatSendBtn">Send</button>
+          </div>
         </div>
       </aside>
     </main>
