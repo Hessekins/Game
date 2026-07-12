@@ -460,9 +460,11 @@ io.on('connection', (socket) => {
     const room = createRoom(socket.id, name, { maxPlayers, isPrivate });
     addPlayer(room, socket.id, name);
     socket.join(room.code);
+    socket.leave('browsing');
     socket.data.roomCode = room.code;
     socket.emit('joinedRoom', { code: room.code, selfId: socket.id });
     broadcastRoomState(room);
+    updatePlayerStatus(socket.id, 'waiting');
     if (!room.isPrivate) broadcastBrowsableRooms();
   });
 
