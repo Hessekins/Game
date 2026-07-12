@@ -185,7 +185,7 @@ function broadcastPlayersList() {
     name: p.name,
     status: p.status,
   }));
-  io.to('browsing').emit('playersList', playerList);
+  io.emit('playersList', playerList);
 }
 
 function updatePlayerStatus(socketId, status) {

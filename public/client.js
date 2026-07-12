@@ -2,7 +2,7 @@ const socket = io();
 
 let selfId = null;
 let roomCode = null;
-let playerName = null;
+let playerName = localStorage.getItem('playerName');
 let currentLetters = [];
 let submitCountdownHandle = null;
 let voteCountdownHandle = null;
@@ -34,6 +34,7 @@ el('enterGameBtn').addEventListener('click', () => {
   const name = el('playerName').value.trim();
   if (!name) return showNameError('Enter a name first.');
   playerName = name;
+  localStorage.setItem('playerName', playerName);
   el('nameError').classList.add('hidden');
   showView('game-browser');
   socket.emit('enterGameBrowser', { name: playerName });
@@ -48,8 +49,13 @@ function showNameError(msg) {
   el('nameError').classList.remove('hidden');
 }
 
-// Show name entry on first load
-showView('name-entry');
+// On load, check if we have a saved player name
+if (playerName) {
+  showView('game-browser');
+  socket.emit('enterGameBrowser', { name: playerName });
+} else {
+  showView('name-entry');
+}
 
 // ---------- Game Browser ----------
 el('createRoomBtn').addEventListener('click', () => {
