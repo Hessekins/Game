@@ -12,15 +12,22 @@ const io = new Server(server);
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ---------- Game constants ----------
-const SUBMIT_SECONDS = 60;
 const VOTE_SECONDS = 30;
 const RESULTS_SECONDS = 12;
-const TOTAL_ROUNDS = 3;
 const MIN_PLAYERS = 3;
 const MAX_CHAT_HISTORY = 100;
 const MAX_PLAYERS_MIN = 3;
 const MAX_PLAYERS_MAX = 8;
 const DEFAULT_MAX_PLAYERS = 4;
+const DEFAULT_SUBMIT_SECONDS = 60;
+const DEFAULT_MAX_LETTERS = 5;
+const DEFAULT_ROUNDS = 3;
+const MIN_SUBMIT_SECONDS = 30;
+const MAX_SUBMIT_SECONDS = 120;
+const MIN_MAX_LETTERS = 3;
+const MAX_MAX_LETTERS = 5;
+const MIN_ROUNDS = 1;
+const MAX_ROUNDS = 5;
 
 // Weighted letter pool (roughly English letter frequency) so rounds stay playable.
 const LETTER_POOL =
@@ -30,8 +37,10 @@ function randomLetter() {
   return LETTER_POOL[Math.floor(Math.random() * LETTER_POOL.length)];
 }
 
-function generateLetters() {
-  const count = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5 letters
+function generateLetters(maxLetters = DEFAULT_MAX_LETTERS) {
+  maxLetters = Math.max(MIN_MAX_LETTERS, Math.min(MAX_MAX_LETTERS, maxLetters));
+  const minLetters = Math.max(MIN_MAX_LETTERS, maxLetters - 2);
+  const count = minLetters + Math.floor(Math.random() * (maxLetters - minLetters + 1));
   const letters = [];
   for (let i = 0; i < count; i++) letters.push(randomLetter());
   return letters;
@@ -56,7 +65,7 @@ const rooms = new Map();
 // Global lobby chat (separate from in-game room chat)
 const lobbyChat = [];
 
-function createRoom(hostSocketId, hostName, { maxPlayers = DEFAULT_MAX_PLAYERS, isPrivate = false } = {}) {
+function createRoom(hostSocketId, hostName, { maxPlayers = DEFAULT_MAX_PLAYERS, maxLetters = DEFAULT_MAX_LETTERS, submitDurationSeconds = DEFAULT_SUBMIT_SECONDS, roundsToPlay = DEFAULT_ROUNDS, isPrivate = false } = {}) {
   const code = generateRoomCode();
   const room = {
     code,
@@ -64,7 +73,7 @@ function createRoom(hostSocketId, hostName, { maxPlayers = DEFAULT_MAX_PLAYERS, 
     players: new Map(), // id -> { id, name, score, connected, isHost }
     spectators: new Set(), // socketIds of players who joined after game started
     phase: 'lobby', // lobby | submitting | voting | results | gameover
-    round: 0, // 1..TOTAL_ROUNDS, or tiebreaker round number
+    round: 0, // 1..roundsToPlay, or tiebreaker round number
     isTiebreaker: false,
     tiebreakIds: [], // player ids competing in current tiebreaker round
     letters: [],
@@ -77,6 +86,9 @@ function createRoom(hostSocketId, hostName, { maxPlayers = DEFAULT_MAX_PLAYERS, 
     timerEndsAt: null,
     roomChat: [], // in-game chat (separate from global lobbyChat)
     maxPlayers: Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, maxPlayers)),
+    maxLetters: Math.max(MIN_MAX_LETTERS, Math.min(MAX_MAX_LETTERS, maxLetters)),
+    submitDurationSeconds: Math.max(MIN_SUBMIT_SECONDS, Math.min(MAX_SUBMIT_SECONDS, submitDurationSeconds)),
+    roundsToPlay: Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, roundsToPlay)),
     isPrivate,
     createdAt: Date.now(),
   };
@@ -126,11 +138,14 @@ function roomStateForClients(room) {
     code: room.code,
     phase: room.phase,
     round: room.round,
-    totalRounds: TOTAL_ROUNDS,
+    totalRounds: room.roundsToPlay,
     isTiebreaker: room.isTiebreaker,
     players: publicPlayers(room),
     timerEndsAt: room.timerEndsAt,
     maxPlayers: room.maxPlayers,
+    maxLetters: room.maxLetters,
+    submitDurationSeconds: room.submitDurationSeconds,
+    roundsToPlay: room.roundsToPlay,
     isPrivate: room.isPrivate,
     spectatorCount: room.spectators.size,
   };
@@ -214,26 +229,26 @@ function startTiebreakRound(room, tiedIds) {
 function startRoundCommon(room, participantIds) {
   clearTimer(room);
   room.phase = 'submitting';
-  room.letters = generateLetters();
+  room.letters = generateLetters(room.maxLetters);
   room.participantIds = participantIds;
   room.outIds = new Set();
   room.submissions = new Map();
   room.votes = new Map();
   room.anonOrder = [];
-  room.timerEndsAt = Date.now() + SUBMIT_SECONDS * 1000;
+  room.timerEndsAt = Date.now() + room.submitDurationSeconds * 1000;
 
   io.to(room.code).emit('roundStart', {
     round: room.round,
-    totalRounds: TOTAL_ROUNDS,
+    totalRounds: room.roundsToPlay,
     isTiebreaker: room.isTiebreaker,
     letters: room.letters,
     participantIds: room.participantIds,
     endsAt: room.timerEndsAt,
-    durationSeconds: SUBMIT_SECONDS,
+    durationSeconds: room.submitDurationSeconds,
   });
   broadcastRoomState(room);
 
-  room.timer = setTimeout(() => endSubmitPhase(room), SUBMIT_SECONDS * 1000);
+  room.timer = setTimeout(() => endSubmitPhase(room), room.submitDurationSeconds * 1000);
 }
 
 function checkAllSubmitted(room) {
@@ -363,7 +378,7 @@ function advanceAfterResults(room) {
     return;
   }
 
-  if (room.round >= TOTAL_ROUNDS) {
+  if (room.round >= room.roundsToPlay) {
     const players = connectedPlayers(room).length
       ? [...room.players.values()]
       : [...room.players.values()];
@@ -525,7 +540,7 @@ io.on('connection', (socket) => {
     broadcastBrowsableRooms();
   });
 
-  socket.on('updateRoomSettings', ({ maxPlayers, isPrivate }) => {
+  socket.on('updateRoomSettings', ({ maxPlayers, maxLetters, submitDurationSeconds, roundsToPlay, isPrivate }) => {
     const room = rooms.get(socket.data.roomCode);
     if (!room) return;
     if (socket.id !== room.hostId) return sendError(socket, 'Only the host can change settings.');
@@ -533,16 +548,42 @@ io.on('connection', (socket) => {
 
     if (maxPlayers !== undefined) {
       room.maxPlayers = Math.max(MAX_PLAYERS_MIN, Math.min(MAX_PLAYERS_MAX, maxPlayers));
-      // If max decreased below current players, keep them but prevent new joins
       if (room.players.size > room.maxPlayers) {
         return sendError(socket, 'Max players cannot be less than current player count.');
       }
+    }
+    if (maxLetters !== undefined) {
+      room.maxLetters = Math.max(MIN_MAX_LETTERS, Math.min(MAX_MAX_LETTERS, maxLetters));
+    }
+    if (submitDurationSeconds !== undefined) {
+      room.submitDurationSeconds = Math.max(MIN_SUBMIT_SECONDS, Math.min(MAX_SUBMIT_SECONDS, submitDurationSeconds));
+    }
+    if (roundsToPlay !== undefined) {
+      room.roundsToPlay = Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, roundsToPlay));
     }
     if (isPrivate !== undefined) {
       room.isPrivate = Boolean(isPrivate);
     }
     broadcastRoomState(room);
     broadcastBrowsableRooms();
+  });
+
+  socket.on('removePlayer', ({ targetId }) => {
+    const room = rooms.get(socket.data.roomCode);
+    if (!room) return;
+    if (socket.id !== room.hostId) return sendError(socket, 'Only the host can remove players.');
+    if (room.phase !== 'lobby') return sendError(socket, 'Cannot remove players after game starts.');
+    const target = room.players.get(targetId);
+    if (!target) return sendError(socket, 'Player not found.');
+
+    room.players.delete(targetId);
+    room.spectators.delete(targetId);
+
+    if (targetId === room.hostId) {
+      reassignHostIfNeeded(room);
+    }
+
+    broadcastRoomState(room);
   });
 
   socket.on('lobbyChat', ({ text }) => {

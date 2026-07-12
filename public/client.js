@@ -163,6 +163,9 @@ function renderLobby(state) {
   if (isHost) {
     hostSettings.style.display = 'block';
     el('hostMaxPlayers').value = state.maxPlayers;
+    el('hostMaxLetters').value = state.maxLetters || 5;
+    el('hostRoundDuration').value = state.submitDurationSeconds || 60;
+    el('hostNumRounds').value = state.roundsToPlay || 3;
     el('hostPrivate').checked = state.isPrivate;
   } else {
     hostSettings.style.display = 'none';
@@ -173,7 +176,35 @@ function renderLobby(state) {
   list.innerHTML = '';
   state.players.forEach((p) => {
     const li = document.createElement('li');
-    li.innerHTML = `<span>${escapeHtml(p.name)}</span> ${p.isHost ? '<span class="tag host">HOST</span>' : ''} ${!p.connected ? '<span class="tag out">offline</span>' : ''}`;
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = p.name;
+    li.appendChild(nameSpan);
+
+    if (p.isHost) {
+      const hostTag = document.createElement('span');
+      hostTag.className = 'tag host';
+      hostTag.textContent = 'HOST';
+      li.appendChild(hostTag);
+    }
+
+    if (!p.connected) {
+      const offlineTag = document.createElement('span');
+      offlineTag.className = 'tag out';
+      offlineTag.textContent = 'offline';
+      li.appendChild(offlineTag);
+    }
+
+    if (isHost && p.id !== selfId) {
+      const kickBtn = document.createElement('button');
+      kickBtn.textContent = 'Remove';
+      kickBtn.style.padding = '4px 10px';
+      kickBtn.style.fontSize = '0.85rem';
+      kickBtn.addEventListener('click', () => {
+        socket.emit('removePlayer', { targetId: p.id });
+      });
+      li.appendChild(kickBtn);
+    }
+
     list.appendChild(li);
   });
 
@@ -222,8 +253,11 @@ socket.on('leftRoom', () => {
 
 el('applySettingsBtn').addEventListener('click', () => {
   const maxPlayers = Math.max(3, Math.min(8, parseInt(el('hostMaxPlayers').value) || 4));
+  const maxLetters = Math.max(3, Math.min(5, parseInt(el('hostMaxLetters').value) || 5));
+  const submitDurationSeconds = Math.max(30, Math.min(120, parseInt(el('hostRoundDuration').value) || 60));
+  const roundsToPlay = Math.max(1, Math.min(5, parseInt(el('hostNumRounds').value) || 3));
   const isPrivate = el('hostPrivate').checked;
-  socket.emit('updateRoomSettings', { maxPlayers, isPrivate });
+  socket.emit('updateRoomSettings', { maxPlayers, maxLetters, submitDurationSeconds, roundsToPlay, isPrivate });
 });
 
 function renderScoreboard(players) {
